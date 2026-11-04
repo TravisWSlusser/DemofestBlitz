@@ -46,8 +46,8 @@
       const groupHtml = Array(copies).fill(g.outerHTML).join('');
       track.innerHTML = groupHtml + groupHtml;
       const half = track.scrollWidth / 2;
-      track.style.animationDuration = Math.max(8, half / SPEED_PX_S) + 's';
-      track.style.animation = '';
+      track.style.animation = '';                  // back to the stylesheet animation…
+      track.style.animationDuration = Math.max(8, half / SPEED_PX_S) + 's';   // …at a constant speed whatever the width
     }
     function tickAgo() { track.querySelectorAll('.tk-item[data-at]').forEach(n => { const a = n.querySelector('.tk-ago'); if (a) a.textContent = ago(n.getAttribute('data-at')); }); }
     async function refresh() {
