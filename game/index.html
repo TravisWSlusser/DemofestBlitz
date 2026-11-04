@@ -3334,7 +3334,7 @@ function fitStage(){
   const scale=Math.min(sw/W, sh/H);
   document.getElementById('frame').style.transform=`scale(${scale})`;
   // guard: too small or portrait
-  const tooSmall = sw < 640 || sh < 330 || sw < sh;   // 330: landscape phones inside in-app browsers (chrome eats ~50px)
+  const tooSmall = sw < sh;   // Demofest booth build: only a portrait frame trips the guard; the 640x330 floor was for phones in Mindtickle
   document.getElementById('guard').style.display = tooSmall ? 'flex' : 'none';
 }
 function toggleFullscreen(){
