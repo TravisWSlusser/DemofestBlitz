@@ -11,7 +11,8 @@
 <style>
   /* Home: the REC Room header, then two framed doors. Everything fits one screen. */
   .content { padding: 0 32px 14px; }
-  header { display: flex; flex-direction: column; align-items: center; padding: 14px 0 6px; gap: 6px; }
+  #ticker { margin-top: 12px; }
+  header { display: flex; flex-direction: column; align-items: center; padding: 10px 0 6px; gap: 6px; }
   header .logo-video { height: clamp(80px, 15vh, 170px); filter: drop-shadow(0 0 28px rgba(16,207,201,.55)); }
   header .label { font-size: .8rem; }
   header .strap { display: flex; align-items: center; gap: 18px; }
@@ -69,6 +70,7 @@
   <div class="scanlines"></div>
 
   <div class="content">
+    <div id="ticker"></div>
     <header>
       <video class="logo-video" autoplay muted loop playsinline poster="assets/brand/RecRoom_Logo1.png">
         <source src="assets/brand/REC_Room_logo_360.webm" type="video/webm">
@@ -111,7 +113,9 @@
     </footer>
   </div>
 
+  <script src="assets/ticker.js"></script>
   <script>
+    Ticker.mount(document.getElementById('ticker'));
     // Home is where idle returns land: make sure no previous player lingers.
     try { sessionStorage.removeItem('demofest.player'); } catch (e) {}
   </script>

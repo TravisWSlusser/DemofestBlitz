@@ -12,6 +12,7 @@
   .content { padding: 0 20px 14px; }
   body { overflow: auto; }   /* fits on a booth screen; a short laptop scrolls rather than squeezing the game */
   nav { display: flex; justify-content: space-between; align-items: center; padding: 12px 0 10px; gap: 12px; }
+  body.in-arena nav { display: none; }   /* the arena bar carries the links; every pixel above the ticker goes to the game */
   nav .label { font-size: .8rem; }
   nav .links { display: flex; gap: 8px; }
   main { flex: 1; min-height: 0; }
@@ -40,41 +41,28 @@
   .login-cancel:hover { color: #9fb4d0; }
 
   /* ---- arena ---- */
-  #arena { flex-direction: column; gap: 10px; }
+  #arena { flex-direction: column; gap: 8px; padding-top: 8px; }
   .stage { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 8px; }
   .who { display: flex; align-items: center; justify-content: space-between; gap: 12px; font-family: 'Share Tech Mono', monospace; font-size: .62rem; letter-spacing: .12em; text-transform: uppercase; color: var(--muted); }
+  .who .links { display: flex; align-items: center; gap: 8px; }
+  .who .btn { padding: 7px 14px; font-size: .62rem; }
+  .who .btn.fs { font-size: .66rem; letter-spacing: .18em; box-shadow: 0 0 16px rgba(16,207,201,.35); }
+  .who .btn.fs::before { content: '\2922'; font-family: 'VT323', monospace; font-size: 1rem; line-height: 0; margin-right: 8px; vertical-align: -1px; }
+  :fullscreen .who .btn.fs::before { content: '\2921'; }
   .who b { color: #fff; }
   .who .tri { font-family: 'VT323', monospace; font-size: 1.5rem; color: var(--cyan); letter-spacing: .08em; margin-right: 10px; text-transform: none; }
   .frame-wrap { position: relative; flex: 1; min-height: 0; display: flex; align-items: center; justify-content: center; }
-  /* height-led: the frame is as wide as the room left above the board allows (nav + who + board strip + gaps ≈ 250px; the game refuses anything under 640px wide), never wider than the page */
-  .game-frame { position: relative; width: clamp(680px, calc((100vh - 250px) * 16 / 9), 100%);   /* never below the game's own 640x360 guard; a short screen scrolls instead */ aspect-ratio: 16/9; display: flex; margin: 0 auto; }
+  /* height-led: the frame is as wide as the room left above the ticker allows (bar + ticker + gaps ≈ 112px; the game refuses anything under 640px wide), never wider than the page */
+  .game-frame { position: relative; width: clamp(680px, calc((100vh - 112px) * 16 / 9), 100%);   /* never below the game's own 640x360 guard; a short screen scrolls instead */ aspect-ratio: 16/9; display: flex; margin: 0 auto; }
   .game-frame iframe { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; display: block; background: #06101f; }
   .toast { position: absolute; left: 50%; top: 14px; transform: translateX(-50%) translateY(-20px); z-index: 6;
     background: var(--gold); color: #06101C; font-family: 'Share Tech Mono', monospace; font-weight: bold; font-size: .8rem; letter-spacing: .15em; text-transform: uppercase;
     padding: 10px 18px; opacity: 0; pointer-events: none; transition: all .3s ease; }
   .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
 
-  aside { width: 100%; flex: none; height: 118px; display: flex; flex-direction: column; min-height: 0; }
-  aside .board-panel { flex: 1; min-height: 0; display: flex; flex-direction: row; align-items: stretch; gap: 16px; padding: 8px 12px; }
-  .lead { flex: none; width: 210px; display: flex; flex-direction: column; justify-content: center; gap: 2px; border-right: 1px solid rgba(16,207,201,.2); padding-right: 14px; }
-  .lead .panel-title { border: 0; padding: 0; margin: 0; }
-  .roomhigh { display: flex; flex-direction: column; align-items: flex-start; gap: 0; margin: 0; padding: 0; border: 0;
-    font-family: 'Share Tech Mono', monospace; font-size: .5rem; letter-spacing: .12em; text-transform: uppercase; color: var(--muted); }
-  .roomhigh b { font-family: 'VT323', monospace; font-size: 2.1rem; line-height: 1; color: var(--gold); letter-spacing: .04em; }
-  .board { flex: 1; min-width: 0; overflow: hidden; display: grid; grid-template-columns: repeat(5, 1fr); grid-auto-rows: min-content; gap: 5px 8px; align-content: center; }
-  .row { display: grid; grid-template-columns: 18px 18px 44px 1fr auto; gap: 6px; align-items: center; padding: 4px 8px;
-    background: rgba(16,207,201,.05); border: 1px solid rgba(16,207,201,.18); font-family: 'VT323', monospace; font-size: 1.2rem; line-height: 1; }
-  .row.me { background: rgba(16,207,201,.16); border-color: var(--cyan); box-shadow: 0 0 12px rgba(16,207,201,.25); }
-  .row .rk { color: var(--muted); text-align: right; font-size: .95rem; }
-  .row .md { width: 16px; height: 16px; object-fit: contain; }
-  .row .tr { color: var(--cyan); letter-spacing: .05em; }
-  .row .nm { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; color: var(--ink); }
-  .row .sc { color: #fff; }
-  .row:nth-child(1) .rk { color: var(--gold); } .row:nth-child(2) .rk { color: #CFD6DD; } .row:nth-child(3) .rk { color: #C9803A; }
-  .empty { grid-column: 1 / -1; font-family: 'Share Tech Mono', monospace; font-size: .6rem; letter-spacing: .12em; text-transform: uppercase; color: var(--dim); text-align: center; padding: 10px; line-height: 1.8; }
-  aside .foot { font-family: 'Share Tech Mono', monospace; font-size: .46rem; letter-spacing: .12em; text-transform: uppercase; color: var(--dim); margin-top: 4px; }
+  aside { width: 100%; flex: none; }
 
-  @media (max-width:980px){ body{ overflow:auto } .content{ height:auto; min-height:100% } .game-frame{ width:100% } aside{ height:auto } aside .board-panel{ flex-direction:column } .lead{ width:auto; border:0; padding:0 } .board{ grid-template-columns:1fr 1fr; max-height:420px; overflow:auto } }
+  @media (max-width:980px){ body{ overflow:auto } .content{ height:auto; min-height:100% } .game-frame{ width:100% } }
 </style>
 </head>
 <body>
@@ -88,8 +76,7 @@
   <nav>
     <span class="label">Side-Qlik Blitz &nbsp;·&nbsp; Demofest</span>
     <div class="links">
-      <button class="btn ghost" id="switchBtn" type="button" hidden>Switch player</button>
-      <a class="btn ghost" href="index.html" id="homeBtn">Start over</a>
+      <a class="btn ghost" href="index.html">Start over</a>
     </div>
   </nav>
 
@@ -133,6 +120,11 @@
         <div class="who">
           <div><span class="tri" id="whoTri">ABC</span><b id="whoName">Player</b> <span id="whoBest"></span></div>
           <div id="status" class="status-online">Loading the arcade…</div>
+          <div class="links">
+            <button class="btn fs" id="fsBtn" type="button">Full screen</button>
+            <button class="btn ghost" id="switchBtn" type="button">Switch player</button>
+            <button class="btn ghost" id="homeBtn" type="button">Start over</button>
+          </div>
         </div>
         <div class="frame-wrap">
           <div class="game-frame frame">
@@ -143,36 +135,27 @@
         </div>
       </div>
       <aside>
-        <div class="panel board-panel">
-          <div class="lead">
-            <div class="panel-title">Demofest Top Scores</div>
-            <div class="roomhigh"><span>High score to beat</span><b id="roomHigh">—</b></div>
-            <div class="foot">Best run per player · live</div>
-          </div>
-          <div class="board" id="board"><div class="empty">Loading…</div></div>
-        </div>
+        <div id="ticker"></div>
       </aside>
     </section>
   </main>
   </div>
 
   <script src="assets/kiosk.js"></script>
+  <script src="assets/ticker.js"></script>
   <script src="assets/places.js"></script>
   <script>
   'use strict';
   /* ---- booth tuning ---- */
   const IDLE_MS   = 20000;   // no input for this long → "Still playing?"
   const PROMPT_MS = 10000;   // …and this long to answer before returning home
-  const BOARD_REFRESH_MS = 15000;
-  const BOARD_ROWS = 10;
   const BURST_GAP = [8000, 15000];   // map rotation: one past run every 8–15s
   const API = '/api/blitz/';
 
   /* ---- state ---- */
   let player = null;          // { id, name, trigram, token, place, lat, lon, high, games }
   let gameReady = false;
-  let roomHigh = 0;
-  let boardTimer = null;
+  let ticker = null;
   let map = null, pool = [], poolIdx = 0, burstTimer = null;   // map retired 4 Nov: stays null, bursts are no-ops
   const $ = id => document.getElementById(id);
   const frame = $('game');
@@ -191,7 +174,14 @@
   }
 
   /* ---- views ---- */
-  function show(id){ document.querySelectorAll('.view').forEach(v => v.classList.toggle('show', v.id === id)); $('switchBtn').hidden = id !== 'arena'; }
+  function show(id){ document.querySelectorAll('.view').forEach(v => v.classList.toggle('show', v.id === id)); document.body.classList.toggle('in-arena', id === 'arena'); }
+
+  /* ---- full screen: the whole arena (game + ticker). Entered on the Play click itself, since that is the user gesture; the bar button toggles it afterwards. ---- */
+  function enterFullscreen(){ try { if (document.fullscreenEnabled && !document.fullscreenElement) document.documentElement.requestFullscreen({ navigationUI: 'hide' }).catch(() => {}); } catch (_) {} }
+  function toggleFullscreen(){ if (document.fullscreenElement) document.exitFullscreen().catch(() => {}); else enterFullscreen(); }
+  $('fsBtn').addEventListener('click', toggleFullscreen);
+  document.addEventListener('fullscreenchange', () => { $('fsBtn').textContent = document.fullscreenElement ? 'Exit full screen' : 'Full screen'; });
+  if (!document.fullscreenEnabled) $('fsBtn').hidden = true;
 
   /* ---- sign-in ---- */
   $('trigram').addEventListener('input', e => { e.target.value = e.target.value.replace(/[^A-Za-z]/g, '').toUpperCase().slice(0, 3); });
@@ -202,6 +192,7 @@
     if (!name) return err.textContent = 'Tell us your name.';
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return err.textContent = 'That email does not look right.';
     if (!/^[A-Z]{3}$/.test(trigram)) return err.textContent = 'The tag is exactly three letters.';
+    enterFullscreen();   // now, while the click still counts as a gesture
     $('go').disabled = true; $('go').textContent = 'One moment…';
     const where = resolvePlace($('place').value);
     try {
@@ -224,8 +215,7 @@
     $('status').textContent = 'Loading the arcade…';
     show('arena');
     loadGame();
-    refreshBoard();
-    clearInterval(boardTimer); boardTimer = setInterval(refreshBoard, BOARD_REFRESH_MS);
+    if (ticker) ticker.refresh(); else ticker = Ticker.mount($('ticker'));
     startRotation();
     Kiosk.start({ idleMs: IDLE_MS, promptMs: PROMPT_MS, onTimeout: goHome });
   }
@@ -251,7 +241,7 @@
 
   async function sendInit(){
     if (!player || !frame.contentWindow) return;
-    let high = roomHigh;
+    let high = 0;
     try { const r = await fetch(API + 'getScores'); if (r.ok) { const d = await r.json(); high = Number(d.high) || 0; } } catch (_) {}
     frame.contentWindow.postMessage({
       type: 'BLITZ_INIT', trigram: player.trigram, territory: 'DEMOFEST', country_code: null,
@@ -274,7 +264,7 @@
       toast(d.roomHigh === score && score > 0 ? '★ NEW DEMOFEST HIGH ★ ' + score.toLocaleString()
             : newBest ? 'New personal best: ' + score.toLocaleString()
             : 'Score saved: ' + score.toLocaleString());
-      refreshBoard();
+      if (ticker) ticker.refresh();
     } catch (ex) {
       toast('Could not save that run (' + (ex.message || 'network') + ')');
     }
@@ -290,44 +280,18 @@
   let toastT = null;
   function toast(msg){ const t = $('toast'); t.textContent = msg; t.classList.add('show'); clearTimeout(toastT); toastT = setTimeout(() => t.classList.remove('show'), 3500); }
 
-  /* ---- leaderboard ---- */
-  async function refreshBoard(){
-    try {
-      const r = await fetch(API + 'getScores');
-      if (!r.ok) throw new Error(r.status);
-      const d = await r.json();
-      const rows = (d.territories && d.territories.DEMOFEST) || [];
-      roomHigh = Number(d.high) || 0;
-      if (Array.isArray(d.recent)) { pool = d.recent.slice().sort(() => Math.random() - 0.5); poolIdx = 0; }
-      $('roomHigh').textContent = roomHigh ? roomHigh.toLocaleString() : '—';
-      const b = $('board');
-      if (!rows.length) { b.innerHTML = '<div class="empty">No scores yet.<br>Yours could be the first.</div>'; return; }
-      const me = player ? player.id : null;
-      const top = rows.slice(0, BOARD_ROWS);
-      let html = top.map((p, i) => row(p, i + 1, p.id === me)).join('');
-      const myIdx = rows.findIndex(p => p.id === me);
-      if (myIdx >= BOARD_ROWS) html += '<div class="row"><span class="rk">…</span><span></span><span></span><span></span><span></span></div>' + row(rows[myIdx], myIdx + 1, true);
-      b.innerHTML = html;
-    } catch (_) { /* keep the last good board */ }
-  }
-  const esc = s => String(s).replace(/[&<>"']/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c]));
-  function row(p, rank, mine){
-    const medal = rank <= 3 ? '<img class="md" src="assets/brand/medal_' + ['first','second','third'][rank - 1] + '.png" alt="">' : '<span></span>';
-    return '<div class="row' + (mine ? ' me' : '') + '"><span class="rk">' + rank + '</span>' + medal + '<span class="tr">' + esc(p.trigram) + '</span>' +
-           '<span class="nm">' + esc(firstName(p.name)) + '</span><span class="sc">' + (p.high || 0).toLocaleString() + '</span></div>';
-  }
-  function firstName(n){ const parts = String(n || '').trim().split(/\s+/); return parts.length > 1 ? parts[0] + ' ' + parts[parts.length - 1][0] + '.' : parts[0] || ''; }
 
   /* ---- leaving ---- */
   function abandonGame(){ try { frame.contentWindow && frame.contentWindow.postMessage({ type: 'BLITZ_ABANDON' }, '*'); } catch (_) {} }
   function goHome(){ abandonGame(); Kiosk.stop(); stopRotation(); location.href = 'index.html'; }
   $('switchBtn').addEventListener('click', () => {
-    abandonGame(); Kiosk.stop(); stopRotation(); clearInterval(boardTimer);
+    abandonGame(); Kiosk.stop(); stopRotation();
+    if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
     player = null; frame.src = 'about:blank';
     $('form').reset(); $('err').textContent = '';
     show('signin'); $('name').focus();
   });
-  $('homeBtn').addEventListener('click', e => { e.preventDefault(); goHome(); });
+  $('homeBtn').addEventListener('click', goHome);
 
   show('signin'); $('name').focus();
   </script>
