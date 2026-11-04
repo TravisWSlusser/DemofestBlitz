@@ -16,7 +16,8 @@
   header .logo-video { height: clamp(80px, 15vh, 170px); filter: drop-shadow(0 0 28px rgba(16,207,201,.55)); }
   header .label { font-size: .8rem; }
   header .strap { display: flex; align-items: center; gap: 18px; }
-  header .demofest { height: clamp(34px, 5.5vh, 56px); filter: drop-shadow(0 0 12px rgba(190,255,60,.35)); }
+  footer { position: relative; }
+  footer .demofest { position: absolute; right: 0; bottom: 0; height: clamp(34px, 5.5vh, 56px); filter: drop-shadow(0 0 12px rgba(190,255,60,.35)); }
 
   main { flex: 1; min-height: 0; display: grid; grid-template-columns: 1fr 1fr; gap: 26px; padding: 10px 0 10px; }
   .door {
@@ -77,7 +78,7 @@
       <video class="logo-video" autoplay muted loop playsinline poster="assets/brand/RecRoom_Logo1.png">
         <source src="assets/brand/REC_Room_logo_360.webm" type="video/webm">
       </video>
-      <div class="strap"><img class="demofest" src="assets/brand/demofest_logo.png" alt="DevLearn Demofest 2026"><span class="label cursor">Choose your path</span></div>
+      <div class="strap"><span class="label cursor">Choose your path</span></div>
     </header>
 
     <main>
@@ -110,6 +111,7 @@
 
     <footer>
       <img class="qse" src="assets/brand/qse_typemark.png" alt="Qlik Sales Enablement">
+      <img class="demofest" src="assets/brand/demofest_logo.png" alt="DevLearn Demofest 2026">
       <div class="line">
         <span class="label dim">Side-Qlik Blitz</span><span class="sep">·</span>
         <span class="label dim">A Travis Slusser creation</span><span class="sep">·</span>
