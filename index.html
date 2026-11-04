@@ -37,7 +37,10 @@
   .world .scene { position: relative; flex: 1; min-height: 110px; width: 100%; display: flex; align-items: center; justify-content: center; }
   .world .cover { max-height: 100%; transform: rotate(-5deg); border: 2px solid rgba(255,255,255,.08); box-shadow: 0 18px 50px rgba(0,0,0,.65); }
   .world .sidekick { position: absolute; right: 6%; bottom: 0; max-height: 44%; filter: drop-shadow(0 0 22px rgba(155,89,255,.55)); animation: hover 3.2s ease-in-out infinite; }
-  .world .dorc { position: absolute; left: 3%; bottom: -3%; max-height: 36%; transform: scaleX(-1); opacity: .95; filter: drop-shadow(0 0 16px rgba(0,0,0,.7)); }
+  .world .dorc { position: absolute; --s: clamp(64px, 15vh, 150px); }
+  .world .d1 { left: 4%; bottom: 0; }
+  .world .d2 { left: 1%; top: 2%; --s: clamp(48px, 10vh, 104px); animation-delay: -.9s, -.9s; }
+  .world .d3 { right: 2%; top: 4%; --s: clamp(48px, 10vh, 104px); animation-delay: -1.7s, -1.7s; }
   @keyframes hover { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-10px); } }
 
   /* the arcade: the cartridge, glowing */
@@ -84,7 +87,9 @@
           <div class="scene">
             <img class="cover" src="assets/brand/Comic_Cover_01.png" alt="Issue #1 — The First Adventure">
             <img class="sidekick" src="assets/brand/sideqlik1.png" alt="Side-Qlik">
-            <img class="dorc" src="assets/brand/Fogg_01.png" alt="The Fogg, a D.O.R.C.">
+            <div class="dorc d1" role="img" aria-label="a D.O.R.C." style="background-image:url('game/assets/sprites/dorcs/grin01/webp/purple-grin-01.webp')"></div>
+            <div class="dorc d2" role="img" aria-label="a D.O.R.C." style="background-image:url('game/assets/sprites/dorcs/goof01/webp/green-goof-01.webp')"></div>
+            <div class="dorc d3" role="img" aria-label="a D.O.R.C." style="background-image:url('game/assets/sprites/dorcs/scared01/webp/orange-scared-01.webp')"></div>
           </div>
         </div>
         <h2>EXPLORE THE<br>STELLAR-SELLER UNIVERSE</h2>
