@@ -17,7 +17,7 @@ const CONN = process.env.DATABASE_URL
   || process.env.DATABASE_URL_UNPOOLED
   || process.env.STORAGE_URL
   || process.env.POSTGRES_URL;
-const sql = neon(CONN);
+const sql = CONN ? neon(CONN) : null;   // lazy: no connection string → handler answers 503 instead of crashing at load
 
 const SCORE_ABSOLUTE_MAX = 50000;   // same plausibility caps as the live game
 const DURATION_CAP = 1800;
