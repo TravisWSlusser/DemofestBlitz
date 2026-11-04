@@ -6,7 +6,7 @@
 //   CONTENT  getQuestions / checkAnswer / getCoinQuestions / checkCoinAnswer /
 //            getTerms / checkTerm — same SQL as the live game, READ-ONLY.
 //            Nothing here increments the per-question stats that CAPCOM reads.
-//   DEMOFEST register / logScore / getScores / export — booth players and
+//   DEMOFEST register / logScore / getScores / export / wipe — booth players and
 //            runs, in two tables of their own (demofest_players, demofest_scores)
 //            that are created on first use. Nothing touches `players` or
 //            `score_events`.
@@ -233,8 +233,19 @@ async function exportCsv(req, res) {
   return res.status(200).send(lines.join('\r\n'));
 }
 
+/* POST wipe?key=ADMIN_KEY — empties both booth tables. For clearing test runs
+   before the doors open; the live Qlik tables are untouched. */
+async function wipe(req, res) {
+  const key = process.env.ADMIN_KEY;
+  if (!key || String(req.query.key || "") !== key) return res.status(401).json({ error: "bad key" });
+  if (req.method !== "POST") return res.status(405).json({ error: "POST only" });
+  await ensureTables();
+  await sql`TRUNCATE demofest_scores, demofest_players RESTART IDENTITY`;
+  return res.status(200).json({ ok: true });
+}
+
 const HANDLERS = { getQuestions, checkAnswer, getCoinQuestions, checkCoinAnswer, getTerms, checkTerm,
-  register, logScore, getScores, export: exportCsv };
+  register, logScore, getScores, export: exportCsv, wipe };
 
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
