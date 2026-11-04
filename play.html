@@ -39,29 +39,27 @@
   .login-cancel:hover { color: #9fb4d0; }
 
   /* ---- arena ---- */
-  #arena { gap: 16px; }
+  #arena { flex-direction: column; gap: 10px; }
   .stage { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 8px; }
   .who { display: flex; align-items: center; justify-content: space-between; gap: 12px; font-family: 'Share Tech Mono', monospace; font-size: .62rem; letter-spacing: .12em; text-transform: uppercase; color: var(--muted); }
   .who b { color: #fff; }
   .who .tri { font-family: 'VT323', monospace; font-size: 1.5rem; color: var(--cyan); letter-spacing: .08em; margin-right: 10px; text-transform: none; }
   .frame-wrap { position: relative; flex: 1; min-height: 0; display: flex; align-items: center; justify-content: center; }
-  .game-frame { position: relative; width: 100%; max-height: 100%; aspect-ratio: 16/9; display: flex; }
+  /* height-led: the frame is as wide as the room left above the board allows (nav + who + board + gaps ≈ 390px), never wider than the page */
+  .game-frame { position: relative; width: min(100%, calc((100vh - 390px) * 16 / 9)); aspect-ratio: 16/9; display: flex; margin: 0 auto; }
   .game-frame iframe { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; display: block; background: #06101f; }
   .toast { position: absolute; left: 50%; top: 14px; transform: translateX(-50%) translateY(-20px); z-index: 6;
     background: var(--gold); color: #06101C; font-family: 'Share Tech Mono', monospace; font-weight: bold; font-size: .8rem; letter-spacing: .15em; text-transform: uppercase;
     padding: 10px 18px; opacity: 0; pointer-events: none; transition: all .3s ease; }
   .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
 
-  aside { width: 400px; flex: none; display: flex; flex-direction: column; gap: 12px; min-height: 0; }
-  aside .map-panel { position: relative; flex: none; padding: 0; overflow: hidden; }
-  aside .map-panel .panel-title { position: absolute; top: 8px; left: 12px; right: 12px; z-index: 5; margin: 0; }
-  aside #map { padding-top: 30px; }
+  aside { width: 100%; flex: none; height: 250px; display: flex; flex-direction: column; min-height: 0; }
   aside .board-panel { flex: 1; min-height: 0; display: flex; flex-direction: column; }
   .roomhigh { display: flex; justify-content: space-between; align-items: baseline; margin: 2px 0 6px; padding-bottom: 6px; border-bottom: 1px solid rgba(16,207,201,.12);
     font-family: 'Share Tech Mono', monospace; font-size: .55rem; letter-spacing: .12em; text-transform: uppercase; color: var(--muted); }
   .roomhigh b { font-family: 'VT323', monospace; font-size: 1.6rem; color: var(--gold); letter-spacing: .04em; }
-  .board { flex: 1; overflow: auto; min-height: 0; }
-  .row { display: grid; grid-template-columns: 24px 24px 56px 1fr auto; gap: 8px; align-items: center; padding: 5px 8px; margin-bottom: 4px;
+  .board { flex: 1; overflow: auto; min-height: 0; display: grid; grid-template-columns: 1fr 1fr; gap: 4px 14px; align-content: start; }
+  .row { display: grid; grid-template-columns: 24px 24px 56px 1fr auto; gap: 8px; align-items: center; padding: 4px 8px;
     background: rgba(16,207,201,.05); border: 1px solid rgba(16,207,201,.18); font-family: 'VT323', monospace; font-size: 1.45rem; }
   .row.me { background: rgba(16,207,201,.16); border-color: var(--cyan); box-shadow: 0 0 12px rgba(16,207,201,.25); }
   .row .rk { color: var(--muted); text-align: right; font-size: 1.1rem; }
@@ -70,10 +68,10 @@
   .row .nm { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; color: var(--ink); }
   .row .sc { color: #fff; }
   .row:nth-child(1) .rk { color: var(--gold); } .row:nth-child(2) .rk { color: #CFD6DD; } .row:nth-child(3) .rk { color: #C9803A; }
-  .empty { font-family: 'Share Tech Mono', monospace; font-size: .6rem; letter-spacing: .12em; text-transform: uppercase; color: var(--dim); text-align: center; padding: 28px 10px; line-height: 1.8; }
+  .empty { grid-column: 1 / -1; font-family: 'Share Tech Mono', monospace; font-size: .6rem; letter-spacing: .12em; text-transform: uppercase; color: var(--dim); text-align: center; padding: 28px 10px; line-height: 1.8; }
   aside .foot { font-family: 'Share Tech Mono', monospace; font-size: .5rem; letter-spacing: .12em; text-transform: uppercase; color: var(--dim); text-align: center; padding-top: 6px; }
 
-  @media (max-width:980px){ body{ overflow:auto } .content{ height:auto; min-height:100% } #arena{ flex-direction:column } aside{ width:100%; flex:none } aside .map-panel{ width:100%; max-width:640px; margin:0 auto } .board{ flex:none; max-height:420px } }
+  @media (max-width:980px){ body{ overflow:auto } .content{ height:auto; min-height:100% } .game-frame{ width:100% } aside{ height:auto } .board{ grid-template-columns:1fr; max-height:420px } }
 </style>
 </head>
 <body>
@@ -118,7 +116,7 @@
           <label for="place">Where are you from?</label>
           <input id="place" name="place" type="text" maxlength="80" list="places" placeholder="State or country" autocomplete="off" autocapitalize="words">
           <datalist id="places"></datalist>
-          <div class="hint">Puts your runs on the map. Optional.</div>
+          <div class="hint">Optional.</div>
         </div>
         <div class="err" id="err" role="alert"></div>
         <button class="btn login-btn" id="go" type="submit">Play &rarr;</button>
@@ -142,10 +140,6 @@
         </div>
       </div>
       <aside>
-        <div class="panel map-panel">
-          <div class="panel-title">Live from the floor <span class="status-online">Online</span></div>
-          <div id="map" title="Recent runs, live from wherever people came from"></div>
-        </div>
         <div class="panel board-panel">
           <div class="panel-title">Demofest Top Scores</div>
           <div class="roomhigh"><span>High score to beat</span><b id="roomHigh">—</b></div>
@@ -159,7 +153,6 @@
 
   <script src="assets/kiosk.js"></script>
   <script src="assets/places.js"></script>
-  <script src="assets/worldmap.js"></script>
   <script>
   'use strict';
   /* ---- booth tuning ---- */
@@ -175,7 +168,7 @@
   let gameReady = false;
   let roomHigh = 0;
   let boardTimer = null;
-  let map = null, pool = [], poolIdx = 0, burstTimer = null;
+  let map = null, pool = [], poolIdx = 0, burstTimer = null;   // map retired 4 Nov: stays null, bursts are no-ops
   const $ = id => document.getElementById(id);
   const frame = $('game');
 
@@ -225,8 +218,6 @@
     $('whoBest').textContent = player.high ? ' · your best ' + player.high.toLocaleString() : ' · first run';
     $('status').textContent = 'Loading the arcade…';
     show('arena');
-    if (!map) map = WorldMap.mount($('map'));          // after show(): a hidden panel has no width
-    map.setPin(player.lat, player.lon);
     loadGame();
     refreshBoard();
     clearInterval(boardTimer); boardTimer = setInterval(refreshBoard, BOARD_REFRESH_MS);
@@ -239,7 +230,7 @@
     const tick = () => {
       if (document.visibilityState === 'visible' && pool.length) {
         const r = pool[poolIdx++ % pool.length];
-        if (r) map.burst({ trigram: r.trigram, score: r.score, lat: r.lat, lon: r.lon, place: r.place });
+        if (r && map) map.burst({ trigram: r.trigram, score: r.score, lat: r.lat, lon: r.lon, place: r.place });
       }
       burstTimer = setTimeout(tick, BURST_GAP[0] + Math.random() * (BURST_GAP[1] - BURST_GAP[0]));
     };

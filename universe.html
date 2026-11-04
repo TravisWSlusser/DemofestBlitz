@@ -24,21 +24,15 @@
   .hero .sidekick { position: absolute; right: 0; bottom: -4%; height: 58%; filter: drop-shadow(0 0 22px rgba(155,89,255,.55)); animation: hover 3.2s ease-in-out infinite; }
   @keyframes hover { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-10px); } }
 
-  .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 22px; }
+  .grid { display: grid; grid-template-columns: 1fr; gap: 22px; }
   .grid > * { min-width: 0; }
-  .lineup { display: flex; justify-content: space-around; align-items: flex-end; gap: 6px; padding: 10px 4px 0; }
-  .lineup figure { display: flex; flex-direction: column; align-items: center; gap: 6px; flex: 1 1 0; min-width: 0; }
-  .lineup .dorc { --s: clamp(54px, 7vw, 112px); max-width: 100%; transition: transform .15s ease; }
-  .lineup figure:nth-child(2n) .dorc { animation-delay: -.9s, -.9s; }
-  .lineup figure:nth-child(3n) .dorc { animation-delay: -1.6s, -1.6s; }
-  .lineup figure:hover .dorc { transform: translateY(-6px) scale(1.08); }
   .lineup figcaption { font-family: 'Share Tech Mono', monospace; font-size: .55rem; letter-spacing: .12em; text-transform: uppercase; color: var(--muted); }
 
   .slot { min-height: 240px; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; gap: 10px; }
   .slot .big { font-family: 'VT323', monospace; font-size: 2rem; color: var(--dim); letter-spacing: .06em; }
   .slot .label { color: var(--dim); }
 
-  @media (max-width: 900px) { .hero, .grid { grid-template-columns: 1fr; } .hero .scene { height: 300px; } }
+  @media (max-width: 900px) { .hero { grid-template-columns: 1fr; } .hero .scene { height: 300px; } }
 </style>
 </head>
 <body>
@@ -69,19 +63,6 @@
     </section>
 
     <div class="grid">
-      <section class="panel">
-        <div class="panel-title">The D.O.R.C.S. <span>Difficult Obstacles Reducing Closed Sales</span></div>
-        <div class="lineup">
-          <figure><div class="dorc" role="img" aria-label="blue D.O.R.C." style="background-image:url('game/assets/sprites/dorcs/grin01/webp/blue-grin-01.webp')"></div><figcaption>blue</figcaption></figure>
-          <figure><div class="dorc" role="img" aria-label="green D.O.R.C." style="background-image:url('game/assets/sprites/dorcs/goof01/webp/green-goof-01.webp')"></div><figcaption>green</figcaption></figure>
-          <figure><div class="dorc" role="img" aria-label="red D.O.R.C." style="background-image:url('game/assets/sprites/dorcs/grin01/webp/red-grin-01.webp')"></div><figcaption>red</figcaption></figure>
-          <figure><div class="dorc" role="img" aria-label="yellow D.O.R.C." style="background-image:url('game/assets/sprites/dorcs/goof01/webp/yellow-goof-01.webp')"></div><figcaption>yellow</figcaption></figure>
-          <figure><div class="dorc" role="img" aria-label="purple D.O.R.C." style="background-image:url('game/assets/sprites/dorcs/grin01/webp/purple-grin-01.webp')"></div><figcaption>purple</figcaption></figure>
-          <figure><div class="dorc" role="img" aria-label="teal D.O.R.C." style="background-image:url('game/assets/sprites/dorcs/goof01/webp/teal-goof-01.webp')"></div><figcaption>teal</figcaption></figure>
-          <figure><div class="dorc" role="img" aria-label="orange D.O.R.C." style="background-image:url('game/assets/sprites/dorcs/scared01/webp/orange-scared-01.webp')"></div><figcaption>orange</figcaption></figure>
-          <figure><div class="dorc" role="img" aria-label="pink D.O.R.C." style="background-image:url('game/assets/sprites/dorcs/grin01/webp/pink-grin-01.webp')"></div><figcaption>pink</figcaption></figure>
-        </div>
-      </section>
       <section class="panel slot">
         <div class="panel-title" style="align-self:stretch">Program Interface</div>
         <div class="big">[ YOUR CONTENT HERE ]</div>
