@@ -10,28 +10,77 @@
 <link rel="stylesheet" href="assets/booth.css">
 <style>
   body { overflow: auto; }
-  .content { height: auto; min-height: 100%; max-width: 1500px; margin: 0 auto; padding: 0 32px 30px; }
+  .content { height: auto; min-height: 100%; max-width: 1500px; margin: 0 auto; padding: 0 32px 40px; }
   nav { display: flex; justify-content: space-between; align-items: center; padding: 16px 0 10px; gap: 12px; }
   nav .label { font-size: .8rem; color: var(--emea); }
+  .sec { margin-top: 26px; }
+  .sec-head { text-align: center; margin-bottom: 18px; }
+  .sec-head .h { font-family: 'VT323', monospace; font-size: clamp(34px, 3.6vw, 56px); line-height: 1; letter-spacing: .06em; color: #fff; text-shadow: 0 0 18px rgba(16,207,201,.4); }
+  .sec-head .s { margin-top: 8px; font-size: .72rem; }
+  .sec-head .b { margin: 14px auto 0; max-width: 78ch; font-family: 'VT323', monospace; font-size: clamp(18px, 1.35vw, 23px); line-height: 1.25; color: var(--muted); }
+  .prose { font-family: 'VT323', monospace; font-size: clamp(18px, 1.35vw, 23px); line-height: 1.25; color: var(--muted); }
+  .prose b { color: #fff; font-weight: normal; }
 
-  .hero { position: relative; display: grid; grid-template-columns: 1.2fr 1fr; gap: 28px; align-items: center; padding: 26px 30px; margin-bottom: 22px; border-color: var(--emea); box-shadow: 0 0 30px rgba(255,107,53,.18), inset 0 0 60px rgba(0,0,0,.5); }
+  /* ---- hero ---- */
+  .hero { display: grid; grid-template-columns: 1.1fr 1fr; gap: 28px; align-items: center; padding: 26px 34px; border-color: var(--emea); box-shadow: 0 0 30px rgba(255,107,53,.18), inset 0 0 60px rgba(0,0,0,.5); }
   .hero .corner { border-color: var(--emea); }
-  .hero .wordmark { width: 100%; filter: drop-shadow(0 8px 22px rgba(0,0,0,.6)); }
-  .hero h1 { font-family: 'VT323', monospace; font-size: clamp(34px, 4.2vw, 64px); line-height: .95; letter-spacing: .04em; margin: 18px 0 12px; text-shadow: 0 0 18px rgba(255,107,53,.35); }
-  .hero p { font-family: 'VT323', monospace; font-size: clamp(19px, 1.5vw, 25px); line-height: 1.2; color: var(--muted); max-width: 46ch; }
-  .hero .scene { position: relative; height: clamp(260px, 38vh, 440px); display: flex; align-items: center; justify-content: center; }
-  .hero .cover { height: 100%; transform: rotate(-5deg); border: 2px solid rgba(255,255,255,.08); box-shadow: 0 18px 50px rgba(0,0,0,.65); }
-  .hero .sidekick { position: absolute; right: 0; bottom: -4%; height: 58%; filter: drop-shadow(0 0 22px rgba(155,89,255,.55)); animation: hover 3.2s ease-in-out infinite; }
-  @keyframes hover { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-10px); } }
+  .hero .wordmark { width: 100%; max-width: 640px; filter: drop-shadow(0 8px 22px rgba(0,0,0,.6)); }
+  .hero h1 { font-family: 'VT323', monospace; font-size: clamp(34px, 3.8vw, 58px); line-height: .95; letter-spacing: .04em; margin: 18px 0 12px; text-shadow: 0 0 18px rgba(255,107,53,.35); }
+  .hero .duo { width: 100%; max-height: 46vh; object-fit: contain; filter: drop-shadow(0 18px 40px rgba(0,0,0,.6)); }
 
-  .grid { display: grid; grid-template-columns: 1fr; gap: 22px; }
-  .grid > * { min-width: 0; }
+  /* ---- cast ---- */
+  .cast { display: grid; grid-template-columns: repeat(3, 1fr); gap: 18px; }
+  .card { display: flex; flex-direction: column; padding: 14px 16px 18px; }
+  .card .pic { height: clamp(200px, 30vh, 300px); display: flex; align-items: center; justify-content: center; margin: 6px 0 12px; }
+  .card .pic img { max-height: 100%; max-width: 100%; object-fit: contain; filter: drop-shadow(0 12px 26px rgba(0,0,0,.6)); }
+  .card .nm { font-family: 'VT323', monospace; font-size: 2.1rem; line-height: 1; letter-spacing: .05em; color: #fff; margin: 4px 0 8px; }
+  .card .role { font-size: .6rem; }
+  .card .prose { font-size: clamp(17px, 1.2vw, 21px); }
+  .card.hero-c .role { color: var(--gold); } .card.side-c .role { color: var(--nam); } .card.dorc-c .role { color: var(--emea); }
 
-  .slot { min-height: 240px; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; gap: 10px; }
-  .slot .big { font-family: 'VT323', monospace; font-size: 2rem; color: var(--dim); letter-spacing: .06em; }
-  .slot .label { color: var(--dim); }
+  /* ---- case-file database ---- */
+  .roster { display: grid; grid-template-columns: repeat(6, 1fr); gap: 10px; max-width: 900px; margin: 0 auto 18px; }
+  .suspect { position: relative; aspect-ratio: 1; overflow: hidden; cursor: pointer; background: var(--c); border: 1px solid rgba(16,207,201,.25);
+    transition: transform .15s, box-shadow .2s, border-color .2s; }
+  .suspect img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+  .suspect::after { content: ""; position: absolute; inset: 0; pointer-events: none; box-shadow: inset 0 -34px 30px -20px rgba(0,0,0,.75); }
+  .suspect .no { position: absolute; top: 6px; left: 8px; z-index: 2; font-family: 'Share Tech Mono', monospace; font-size: .55rem; letter-spacing: .14em; color: rgba(255,255,255,.75); text-shadow: 0 1px 4px rgba(0,0,0,.8); }
+  .suspect .tag { position: absolute; bottom: 6px; left: 0; right: 0; z-index: 2; text-align: center; font-family: 'VT323', monospace; font-size: 1.05rem; letter-spacing: .06em; color: #fff; text-shadow: 0 1px 6px rgba(0,0,0,.9); }
+  .suspect:hover { transform: translateY(-3px); }
+  .suspect.active { border-color: var(--cyan); box-shadow: 0 0 18px rgba(16,207,201,.55); }
+  .suspect.active::before { content: ""; position: absolute; inset: 0; z-index: 1; box-shadow: inset 0 0 0 2px var(--cyan); }
 
-  @media (max-width: 900px) { .hero { grid-template-columns: 1fr; } .hero .scene { height: 300px; } }
+  .dossier { display: grid; grid-template-columns: 1fr 1.05fr; gap: 0; overflow: hidden; }
+  .dossier .scene { position: relative; min-height: 420px; background: var(--c, #10172A); display: flex; align-items: center; justify-content: center; overflow: hidden; transition: background .4s ease; }
+  .dossier .scene img { width: 100%; height: 100%; object-fit: cover; position: absolute; inset: 0; animation: caseIn .35s steps(4, end) both; }
+  @keyframes caseIn { from { opacity: 0; transform: translateX(-6px); } to { opacity: 1; transform: none; } }
+  .dossier .scene::after { content: ""; position: absolute; inset: 0; pointer-events: none; background: linear-gradient(90deg, transparent 70%, #10172A 100%),
+    repeating-linear-gradient(0deg, transparent, transparent 2px, rgba(0,0,0,.08) 2px, rgba(0,0,0,.08) 4px); }
+  .stamp { position: absolute; top: 16px; left: 16px; z-index: 2; font-family: 'Share Tech Mono', monospace; font-size: .62rem; letter-spacing: .18em; color: #fff;
+    background: rgba(255,45,155,.9); padding: 6px 10px; transform: rotate(-3deg); box-shadow: 0 4px 14px rgba(0,0,0,.5); }
+  .brief { padding: clamp(20px, 2.6vw, 32px); display: flex; flex-direction: column; gap: 14px; border-left: 1px solid rgba(16,207,201,.25); }
+  .brief .cno { font-size: .6rem; }
+  .brief .nm { font-family: 'VT323', monospace; font-size: clamp(2.4rem, 3.4vw, 3.6rem); line-height: .95; letter-spacing: .04em; color: var(--c); text-shadow: 0 0 18px rgba(0,0,0,.6); }
+  .brief .field { border-top: 1px solid rgba(16,207,201,.14); padding-top: 10px; }
+  .brief .k { font-family: 'Share Tech Mono', monospace; font-size: .56rem; letter-spacing: .18em; text-transform: uppercase; color: var(--muted); margin-bottom: 5px; }
+  .brief .v { font-family: 'VT323', monospace; font-size: clamp(19px, 1.4vw, 24px); line-height: 1.2; color: var(--ink); }
+  .brief .counter { display: flex; align-items: center; gap: 14px; border-top: 1px solid rgba(16,207,201,.3); padding-top: 14px; margin-top: auto; }
+  .brief .counter img { width: 72px; height: 72px; border-radius: 50%; flex: none; box-shadow: 0 0 18px rgba(16,207,201,.4); background: #0c1322; }
+  .brief .counter .k { color: var(--cyan); }
+  .brief .counter .tool { font-family: 'VT323', monospace; font-size: 1.7rem; line-height: 1; color: #fff; letter-spacing: .03em; }
+  .brief .nav-hint { font-size: .5rem; color: var(--dim); margin-top: 4px; }
+
+  footer { margin-top: 26px; display: flex; justify-content: center; align-items: center; gap: 18px; }
+  footer img { height: 54px; opacity: .9; }
+  footer .label { font-size: .58rem; letter-spacing: .25em; }
+
+  @media (max-width: 980px) {
+    .hero, .dossier { grid-template-columns: 1fr; }
+    .cast { grid-template-columns: 1fr; }
+    .roster { grid-template-columns: repeat(3, 1fr); }
+    .dossier .scene { min-height: 300px; }
+    .brief { border-left: 0; border-top: 1px solid rgba(16,207,201,.25); }
+  }
 </style>
 </head>
 <body>
@@ -48,33 +97,135 @@
       <a class="btn ghost" href="play.html">Play Blitz &rarr;</a>
     </nav>
 
+    <!-- ======== HERO ======== -->
     <section class="hero frame">
       <div class="corner tl"></div><div class="corner tr"></div><div class="corner bl"></div><div class="corner br"></div>
       <div>
-        <img class="wordmark" src="assets/brand/StellarSellerLogo_01.png" alt="Stellar-Seller and the Side-Qlik">
+        <img class="wordmark" src="assets/brand/stellar_wordmark.png" alt="Stellar-Seller and the Side-Qlik">
         <h1>A COMIC THAT BECAME<br>AN ENABLEMENT PLATFORM</h1>
-        <p>Stellar-Seller is the seller as hero. Side-Qlik is the AI sidekick. The D.O.R.C.S. are everything standing between a rep and a closed deal. Mission Control, the REC Room and Side-Qlik Blitz all live in this universe.</p>
+        <p class="prose">It started with a simple ask &mdash; <b>&ldquo;make a comic book about AI in sales&rdquo;</b> &mdash; and grew into a universe. A hero any seller can become, a sidekick who <b>is</b> the AI, and monsters that put a face on everything standing between a deal and the close. Then the universe needed a place to live: Mission Control, the REC Room and Side-Qlik Blitz are all built inside it.</p>
       </div>
-      <div class="scene">
-        <img class="cover" src="assets/brand/Comic_Cover_01.png" alt="Issue #1 — The First Adventure">
-        <img class="sidekick" src="assets/brand/sideqlik1.png" alt="Side-Qlik">
+      <img class="duo" src="assets/brand/stellar_and_sideqlik.png" alt="Stellar-Seller and Side-Qlik, back to back">
+    </section>
+
+    <!-- ======== THE CAST ======== -->
+    <section class="sec">
+      <div class="sec-head">
+        <div class="h">THE CAST</div>
+        <div class="label s">Three characters &middot; one logic</div>
+      </div>
+      <div class="cast">
+        <div class="panel card hero-c">
+          <div class="label role">The Hero</div>
+          <div class="pic"><img src="assets/brand/stellar_flight.png" alt="Stellar-Seller in flight"></div>
+          <div class="nm">STELLAR-SELLER</div>
+          <p class="prose">A <b>faceless</b>, armored hero on purpose: any seller can picture themselves inside the suit. Every Stellar-Seller adventure is seeded by a real win from a real Qlik seller.</p>
+        </div>
+        <div class="panel card side-c">
+          <div class="label role">The Sidekick</div>
+          <div class="pic"><img src="assets/brand/sideqlik1.png" alt="Side-Qlik"></div>
+          <div class="nm">SIDE-QLIK</div>
+          <p class="prose">A holographic copilot who doesn&rsquo;t <i>represent</i> the AI &mdash; he <b>is</b> the AI. Loyal, curious, and a full-time believer in asking better questions. He narrates the universe and lends the arcade its name.</p>
+        </div>
+        <div class="panel card dorc-c">
+          <div class="label role">The Obstacles</div>
+          <div class="pic"><img src="assets/brand/dorc_stack.png" alt="A pile of D.O.R.C.S."></div>
+          <div class="nm">THE D.O.R.C.S.</div>
+          <p class="prose"><b>Difficult Obstacles Reducing Closed Sales.</b> Anything that causes a seller difficulty or stands between a deal and the close. Confronting a frustration head-on with a joke turns out to be more honest than pretending it doesn&rsquo;t exist.</p>
+        </div>
       </div>
     </section>
 
-    <div class="grid">
-      <section class="panel slot">
-        <div class="panel-title" style="align-self:stretch">Program Interface</div>
-        <div class="big">[ YOUR CONTENT HERE ]</div>
-        <div class="label">comic pages · video · the Mission Control walkthrough</div>
-      </section>
-    </div>
+    <!-- ======== CASE FILES ======== -->
+    <section class="sec">
+      <div class="sec-head">
+        <div class="h">DORCS DECLASSIFIED</div>
+        <div class="label s">Difficult Obstacles Reducing Closed Sales</div>
+        <p class="b">These are the hidden blockers that quietly derail sales momentum &mdash; not mistakes or a lack of effort, just familiar daily patterns where progress slows, confidence dips, or clarity vanishes right when it&rsquo;s needed most. The creatures merely put a face to the issue. The goal isn&rsquo;t to pretend they don&rsquo;t exist. It&rsquo;s to recognize who they are &mdash; and know what beats them. <b style="color:var(--cyan)">Select a suspect to open the case file.</b></p>
+      </div>
+      <div class="roster" id="roster"></div>
+      <div class="dossier frame">
+        <div class="corner tl"></div><div class="corner tr"></div><div class="corner bl"></div><div class="corner br"></div>
+        <div class="scene" id="caseScene">
+          <div class="stamp" id="caseStamp">CASE #01</div>
+          <img id="caseImg" src="" alt="">
+        </div>
+        <div class="brief">
+          <div>
+            <div class="label cno" id="caseNo">Case file #01</div>
+            <div class="nm" id="caseName">THE BLOCKS</div>
+          </div>
+          <div class="field"><div class="k">Known for</div><div class="v" id="caseBlocker"></div></div>
+          <div class="field"><div class="k">Threat assessment</div><div class="v" id="caseThreat"></div></div>
+          <div class="counter">
+            <img id="caseGif" src="" alt="">
+            <div><div class="k">Countermeasure</div><div class="tool" id="caseTool"></div></div>
+          </div>
+          <div class="label nav-hint">Files rotate on their own &middot; tap any suspect to hold one open</div>
+        </div>
+      </div>
+    </section>
+
+    <footer>
+      <img src="assets/brand/demofest_logo.png" alt="DevLearn Demofest">
+      <span class="label dim">The Stellar-Seller Universe &middot; Qlik Global Sales Enablement</span>
+    </footer>
   </div>
 
   <script src="assets/kiosk.js"></script>
   <script>
-    // Longer leash than the arcade: people read this one. Tune here.
-    const IDLE_MS = 60000, PROMPT_MS = 10000;
-    Kiosk.start({ idleMs: IDLE_MS, promptMs: PROMPT_MS });
+  'use strict';
+  /* ---- booth tuning ---- */
+  const IDLE_MS = 60000, PROMPT_MS = 10000;   // longer leash than the arcade: people read this one
+  const CASE_ROTATE_MS = 10000;               // the dossier flips to the next file on its own…
+  const CASE_HOLD_MS   = 45000;               // …unless someone picked one, then it holds this long
+
+  /* The six case files, verbatim from the DevLearn site's DORCS database.
+     `img` is the full-size render; `c` is the file colour. */
+  const CASES = [
+    { no:'01', name:'THE BLOCKS',     c:'#ff8a3d', img:'assets/brand/dorc_orange.png', blocker:'Searching for answers when you should be selling.',
+      threat:'Selling time bleeds away hunting for information that should be at your fingertips.', tool:'Mindtickle Copilot', gif:'assets/brand/tool_copilot.webp' },
+    { no:'02', name:'THE JUMP-START', c:'#ffd23d', img:'assets/brand/dorc_yellow.png', blocker:'Learning comes too late and takes too long.',
+      threat:'Enablement lands after the moment of need and eats hours you don’t have.', tool:'AI Sales Learning Modules', gif:'assets/brand/tool_learning.webp' },
+    { no:'03', name:'THE BOOGIE',     c:'#3ddc84', img:'assets/brand/dorc_green.png',  blocker:'Unable to practice the pitch.',
+      threat:'You go live without a safe place to rehearse and sharpen the message first.', tool:'Mindtickle AI Role Plays', gif:'assets/brand/tool_roleplays.webp' },
+    { no:'04', name:'THE DRAT-PACK',  c:'#ff2d9b', img:'assets/brand/dorc_pink.png',   blocker:'Meeting review and follow-up is time-consuming.',
+      threat:'Post-call notes and next steps swallow the time you could spend selling.', tool:'Mindtickle Call AI (Notetaker)', gif:'assets/brand/tool_callai.webp' },
+    { no:'05', name:'THE FOGG',       c:'#c0392b', img:'assets/brand/dorc_red.png',    blocker:'The full story of the deal is scattered.',
+      threat:'Deal context lives in ten places, so the whole picture is never in one view.', tool:'Mindtickle Deal Guides', gif:'assets/brand/tool_dealguides.webp' },
+    { no:'06', name:'SOUTH PAW',      c:'#3d8bff', img:'assets/brand/dorc_blue.png',   blocker:'The deal has a scenario you haven’t practiced.',
+      threat:'An unfamiliar curveball shows up live, on a scenario you never rehearsed.', tool:'Mindtickle Real Deal Role Plays', gif:'assets/brand/tool_realdeals.webp' }
+  ];
+
+  const $ = id => document.getElementById(id);
+  const roster = $('roster');
+  roster.innerHTML = CASES.map((c, i) =>
+    '<div class="suspect" data-i="' + i + '" style="--c:' + c.c + '"><span class="no">#' + c.no + '</span>' +
+    '<img src="' + c.img + '" alt="' + c.name + '" loading="lazy"><span class="tag">' + c.name + '</span></div>').join('');
+  roster.addEventListener('click', e => { const s = e.target.closest('.suspect'); if (s) { showCase(+s.dataset.i); hold(); } });
+
+  let cur = -1, rotTimer = null, holdUntil = 0;
+  function showCase(i){
+    cur = i; const c = CASES[i];
+    document.querySelectorAll('.suspect').forEach(s => s.classList.toggle('active', +s.dataset.i === i));
+    const scene = $('caseScene'); scene.style.setProperty('--c', c.c);
+    const img = $('caseImg'); img.style.animation = 'none'; void img.offsetWidth; img.style.animation = ''; img.src = c.img; img.alt = c.name;
+    $('caseStamp').textContent = 'CASE #' + c.no;
+    $('caseNo').textContent = 'Case file #' + c.no;
+    $('caseName').textContent = c.name; $('caseName').style.setProperty('--c', c.c);
+    $('caseBlocker').textContent = c.blocker;
+    $('caseThreat').textContent = c.threat;
+    $('caseTool').textContent = c.tool;
+    const g = $('caseGif'); g.src = c.gif; g.alt = c.tool;
+  }
+  function hold(){ holdUntil = Date.now() + CASE_HOLD_MS; }
+  function tick(){
+    if (document.visibilityState === 'visible' && Date.now() > holdUntil) showCase((cur + 1) % CASES.length);
+    rotTimer = setTimeout(tick, CASE_ROTATE_MS);
+  }
+  showCase(0); rotTimer = setTimeout(tick, CASE_ROTATE_MS);
+
+  Kiosk.start({ idleMs: IDLE_MS, promptMs: PROMPT_MS });
   </script>
 </body>
 </html>
