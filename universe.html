@@ -25,9 +25,10 @@
   @keyframes hover { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-10px); } }
 
   .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 22px; }
+  .grid > * { min-width: 0; }
   .lineup { display: flex; justify-content: space-around; align-items: flex-end; gap: 8px; padding: 10px 6px 0; }
-  .lineup figure { display: flex; flex-direction: column; align-items: center; gap: 6px; flex: 1; }
-  .lineup img { height: clamp(70px, 11vh, 130px); filter: drop-shadow(0 0 12px rgba(0,0,0,.7)); transition: transform .15s ease; }
+  .lineup figure { display: flex; flex-direction: column; align-items: center; gap: 6px; flex: 1 1 0; min-width: 0; }
+  .lineup img { width: 100%; height: clamp(70px, 11vh, 130px); object-fit: contain; filter: drop-shadow(0 0 12px rgba(0,0,0,.7)); transition: transform .15s ease; }
   .lineup figure:hover img { transform: translateY(-6px) scale(1.06); }
   .lineup figcaption { font-family: 'Share Tech Mono', monospace; font-size: .55rem; letter-spacing: .12em; text-transform: uppercase; color: var(--muted); }
 
