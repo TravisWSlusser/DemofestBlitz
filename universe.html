@@ -32,7 +32,21 @@
   .films { display: grid; grid-template-columns: repeat(3, 1fr); gap: 18px; }
   .film { padding: 10px 10px 12px; }
   .film .screen { position: relative; aspect-ratio: 16 / 9; background: #06101f; border: 1px solid rgba(16,207,201,.3); overflow: hidden; }
-  .film .screen iframe { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; }
+  .film .screen { cursor: pointer; }
+  .film .screen img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; transition: transform .25s; }
+  .film .screen:hover img { transform: scale(1.04); }
+  .film .screen .play { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); width: 74px; height: 74px; border-radius: 50%;
+    background: rgba(16,23,42,.78); border: 2px solid var(--cyan); box-shadow: 0 0 24px rgba(16,207,201,.5); display: flex; align-items: center; justify-content: center; transition: transform .2s; }
+  .film .screen:hover .play { transform: translate(-50%, -50%) scale(1.08); }
+  .film .screen .play::after { content: ''; margin-left: 6px; border-style: solid; border-width: 14px 0 14px 24px; border-color: transparent transparent transparent #fff; }
+  .film .screen .fsl { position: absolute; right: 8px; bottom: 8px; font-family: 'Share Tech Mono', monospace; font-size: .5rem; letter-spacing: .2em; text-transform: uppercase; color: var(--cyan); background: rgba(6,16,31,.8); padding: 4px 8px; }
+  /* the player: a black full-screen box with the YouTube iframe in it and a way out */
+  #player { position: fixed; inset: 0; z-index: 50; background: #000; display: none; }
+  #player.on { display: block; }
+  #player iframe { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; }
+  #player .close { position: absolute; top: 14px; right: 14px; z-index: 2; background: rgba(16,23,42,.85); color: #fff; border: 1px solid var(--cyan);
+    font-family: 'Share Tech Mono', monospace; font-size: .62rem; letter-spacing: .18em; text-transform: uppercase; padding: 9px 14px; cursor: pointer; }
+  #player .close:hover { background: var(--cyan); color: #06101C; }
   .film .meta { padding: 10px 4px 0; }
   .film .t { font-family: 'VT323', monospace; font-size: 1.6rem; line-height: 1; letter-spacing: .04em; color: #fff; }
   .film .d { font-size: .55rem; margin-top: 5px; }
@@ -129,19 +143,19 @@
     <section class="sec">
       <div class="sec-head">
         <div class="h">THE FILMS</div>
-        <div class="label s">Where the universe came from &middot; sound on</div>
+        <div class="label s">Where the universe came from &middot; tap one to watch it full screen</div>
       </div>
       <div class="films">
         <div class="panel film">
-          <div class="screen"><iframe src="https://www.youtube-nocookie.com/embed/DNnI-sHJRVM?rel=0&modestbranding=1&playsinline=1" title="The video that started it all" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; fullscreen" allowfullscreen loading="lazy"></iframe></div>
+          <div class="screen" data-yt="DNnI-sHJRVM" title="The video that started it all"><img src="https://i.ytimg.com/vi/DNnI-sHJRVM/hqdefault.jpg" alt="The video that started it all"><span class="play"></span><span class="fsl">Plays full screen</span></div>
           <div class="meta"><div class="label d" style="color:var(--gold)">Origin</div><div class="t">THE ONE THAT STARTED IT ALL</div></div>
         </div>
         <div class="panel film">
-          <div class="screen"><iframe src="https://www.youtube-nocookie.com/embed/mabVLJKwC3g?rel=0&modestbranding=1&playsinline=1" title="SKO kickoff, part 1" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; fullscreen" allowfullscreen loading="lazy"></iframe></div>
+          <div class="screen" data-yt="mabVLJKwC3g" title="SKO kickoff, part 1"><img src="https://i.ytimg.com/vi/mabVLJKwC3g/hqdefault.jpg" alt="SKO kickoff, part 1"><span class="play"></span><span class="fsl">Plays full screen</span></div>
           <div class="meta"><div class="label d">Sales Kickoff &middot; Part 1</div><div class="t">HOW WE OPENED SKO</div></div>
         </div>
         <div class="panel film">
-          <div class="screen"><iframe src="https://www.youtube-nocookie.com/embed/OZpbr4kzKf8?rel=0&modestbranding=1&playsinline=1" title="SKO kickoff, part 2" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; fullscreen" allowfullscreen loading="lazy"></iframe></div>
+          <div class="screen" data-yt="OZpbr4kzKf8" title="SKO kickoff, part 2"><img src="https://i.ytimg.com/vi/OZpbr4kzKf8/hqdefault.jpg" alt="SKO kickoff, part 2"><span class="play"></span><span class="fsl">Plays full screen</span></div>
           <div class="meta"><div class="label d">Sales Kickoff &middot; Part 2</div><div class="t">THE KICKOFF, CONTINUED</div></div>
         </div>
       </div>
@@ -218,6 +232,8 @@
     </footer>
   </div>
 
+  <div id="player"><button class="close" type="button">&larr; Back to the universe</button></div>
+
   <script src="assets/kiosk.js"></script>
   <script>
   'use strict';
@@ -285,12 +301,32 @@
   }
   showCase(0); rotTimer = setTimeout(tick, CASE_ROTATE_MS);
 
-  /* ---- kiosk: a YouTube player is cross-origin, so the watchdog cannot see clicks inside it.
-          Focus moving into any film iframe pauses the idle timer; focus coming back restarts it. ---- */
+  /* ---- films: a tap opens the full-screen player. The tap is the user gesture, so full screen and
+        autoplay-with-sound are both allowed; leaving full screen (Esc, the button) closes the player.
+        The kiosk idle timer pauses while a film is up, since clicks inside YouTube are invisible to it. ---- */
   const kioskOpts = { idleMs: IDLE_MS, promptMs: PROMPT_MS };
   Kiosk.start(kioskOpts);
-  window.addEventListener('blur', () => { setTimeout(() => { const a = document.activeElement; if (a && a.tagName === 'IFRAME' && a.closest('.film')) Kiosk.stop(); }, 0); });
-  window.addEventListener('focus', () => { Kiosk.start(kioskOpts); });
+  const player = $('player');
+  function openFilm(id){
+    Kiosk.stop();
+    const f = document.createElement('iframe');
+    f.src = 'https://www.youtube-nocookie.com/embed/' + id + '?autoplay=1&rel=0&modestbranding=1&playsinline=1';
+    f.allow = 'autoplay; encrypted-media; fullscreen; picture-in-picture';
+    f.allowFullscreen = true;
+    player.appendChild(f);
+    player.classList.add('on');
+    try { if (document.fullscreenEnabled && !document.fullscreenElement) player.requestFullscreen({ navigationUI: 'hide' }).catch(() => {}); } catch (_) {}
+  }
+  function closeFilm(){
+    if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
+    player.classList.remove('on');
+    player.querySelectorAll('iframe').forEach(f => f.remove());   // stops the audio
+    Kiosk.start(kioskOpts);
+  }
+  document.querySelectorAll('.film .screen').forEach(s => s.addEventListener('click', () => openFilm(s.dataset.yt)));
+  player.querySelector('.close').addEventListener('click', closeFilm);
+  document.addEventListener('fullscreenchange', () => { if (!document.fullscreenElement && player.classList.contains('on')) closeFilm(); });
+  document.addEventListener('keydown', e => { if (e.key === 'Escape' && player.classList.contains('on')) closeFilm(); });
   </script>
 </body>
 </html>

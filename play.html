@@ -90,21 +90,21 @@
         <div class="login-sub">Sign in to play · Demofest</div>
         <div class="blurb">Three letters go on the board. Your name and email stay with us so we can say thanks after the show.</div>
         <div class="field">
-          <label for="name">Name</label>
-          <input id="name" name="name" type="text" maxlength="80" required placeholder="Your name" autocomplete="name" autocapitalize="words">
+          <label for="pn">Name</label>
+          <input id="pn" name="pn" type="text" maxlength="80" required placeholder="Your name" autocomplete="off" autocapitalize="words" readonly>
         </div>
         <div class="field">
-          <label for="email">Email</label>
-          <input id="email" name="email" type="email" maxlength="160" required placeholder="you@company.com" autocomplete="email" inputmode="email" autocapitalize="off">
+          <label for="pe">Email</label>
+          <input id="pe" name="pe" type="text" maxlength="160" required placeholder="you@company.com" autocomplete="off" inputmode="email" autocapitalize="off" spellcheck="false" readonly>
         </div>
         <div class="field">
-          <label for="trigram">Your three-letter tag</label>
-          <input id="trigram" name="trigram" class="tri" type="text" maxlength="3" required placeholder="ABC" pattern="[A-Za-z]{3}" autocapitalize="characters" spellcheck="false">
+          <label for="pt">Your three-letter tag</label>
+          <input id="pt" name="pt" class="tri" autocomplete="off" type="text" maxlength="3" required placeholder="ABC" pattern="[A-Za-z]{3}" autocapitalize="characters" spellcheck="false">
           <div class="hint">Initials work. This is what shows on the leaderboard.</div>
         </div>
         <div class="field">
-          <label for="place">Where are you from?</label>
-          <input id="place" name="place" type="text" maxlength="80" list="places" placeholder="State or country" autocomplete="off" autocapitalize="words">
+          <label for="pp">Where are you from?</label>
+          <input id="pp" name="pp" type="text" maxlength="80" list="places" placeholder="State or country" autocomplete="off" autocapitalize="words" readonly>
           <datalist id="places"></datalist>
           <div class="hint">Optional.</div>
         </div>
@@ -184,17 +184,23 @@
   if (!document.fullscreenEnabled) $('fsBtn').hidden = true;
 
   /* ---- sign-in ---- */
-  $('trigram').addEventListener('input', e => { e.target.value = e.target.value.replace(/[^A-Za-z]/g, '').toUpperCase().slice(0, 3); });
+  // Chrome ignores autocomplete="off" for name/email fields it recognises. Unrecognisable ids, plain text types and
+  // read-only-until-touched inputs keep the booth browser's saved profile out of the form.
+  document.querySelectorAll('#form input[readonly]').forEach(i => {
+    const arm = () => { i.removeAttribute('readonly'); };
+    i.addEventListener('focus', arm); i.addEventListener('pointerdown', arm); i.addEventListener('touchstart', arm, { passive: true });
+  });
+  $('pt').addEventListener('input', e => { e.target.value = e.target.value.replace(/[^A-Za-z]/g, '').toUpperCase().slice(0, 3); });
   $('form').addEventListener('submit', async e => {
     e.preventDefault();
-    const name = $('name').value.trim(), email = $('email').value.trim(), trigram = $('trigram').value.trim().toUpperCase();
+    const name = $('pn').value.trim(), email = $('pe').value.trim(), trigram = $('pt').value.trim().toUpperCase();
     const err = $('err'); err.textContent = '';
     if (!name) return err.textContent = 'Tell us your name.';
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return err.textContent = 'That email does not look right.';
     if (!/^[A-Z]{3}$/.test(trigram)) return err.textContent = 'The tag is exactly three letters.';
     enterFullscreen();   // now, while the click still counts as a gesture
     $('go').disabled = true; $('go').textContent = 'One moment…';
-    const where = resolvePlace($('place').value);
+    const where = resolvePlace($('pp').value);
     try {
       const r = await fetch(API + 'register', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name, email, trigram, place: where.place, lat: where.lat, lon: where.lon }) });
       const d = await r.json().catch(() => ({}));
@@ -288,12 +294,12 @@
     abandonGame(); Kiosk.stop(); stopRotation();
     if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
     player = null; frame.src = 'about:blank';
-    $('form').reset(); $('err').textContent = '';
-    show('signin'); $('name').focus();
+    $('form').reset(); $('err').textContent = ''; document.querySelectorAll('#form input').forEach(i => { if (i.id !== 'pt') i.setAttribute('readonly', ''); });
+    show('signin');   // no auto-focus: a focused field is where Chrome offers its saved profile
   });
   $('homeBtn').addEventListener('click', goHome);
 
-  show('signin'); $('name').focus();
+  show('signin');   // no auto-focus: a focused field is where Chrome offers its saved profile
   </script>
 </body>
 </html>
