@@ -50,7 +50,9 @@
   .door p { font-family: 'VT323', monospace; font-size: clamp(15px, min(1.5vw, 2.4vh), 24px); line-height: 1.2; color: var(--muted); max-width: 40ch; margin: 8px 0 14px; }
   .door .btn { font-size: .9rem; padding: 14px 34px; }
 
-  footer { display: flex; justify-content: center; align-items: center; gap: 18px; padding: 4px 0 0; }
+  footer { display: flex; flex-direction: column; justify-content: center; align-items: center; gap: 8px; padding: 6px 0 0; }
+  footer .qse { height: clamp(20px, 3vh, 30px); opacity: .95; filter: drop-shadow(0 0 10px rgba(0,0,0,.6)); }
+  footer .line { display: flex; align-items: center; gap: 18px; }
   footer .label { font-size: .58rem; letter-spacing: .25em; }
   footer .sep { color: var(--dim); }
 
@@ -107,9 +109,12 @@
     </main>
 
     <footer>
-      <span class="label dim">Side-Qlik Blitz</span><span class="sep">·</span>
-      <span class="label dim">A Stellar-Seller production</span><span class="sep">·</span>
-      <span class="label dim">Rank. Elevate. Compete.</span>
+      <img class="qse" src="assets/brand/qse_typemark.png" alt="Qlik Sales Enablement">
+      <div class="line">
+        <span class="label dim">Side-Qlik Blitz</span><span class="sep">·</span>
+        <span class="label dim">A Stellar-Seller production</span><span class="sep">·</span>
+        <span class="label dim">Rank. Elevate. Compete.</span>
+      </div>
     </footer>
   </div>
 
