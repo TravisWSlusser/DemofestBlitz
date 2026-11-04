@@ -25,17 +25,19 @@
     overlay.querySelector('#kpYes').addEventListener('click', activity);
     const css = document.createElement('style');
     css.textContent =
-      '#kioskPrompt{position:fixed;inset:0;z-index:99999;display:none;align-items:center;justify-content:center;' +
-        'background:rgba(6,16,28,.82);backdrop-filter:blur(6px);font-family:Inter,system-ui,sans-serif}' +
-      '#kioskPrompt.show{display:flex}' +
-      '#kioskPrompt .kp-card{background:#0E2742;border:2px solid #10CFC9;border-radius:14px;padding:34px 40px;text-align:center;' +
-        'color:#E7EBEF;box-shadow:0 20px 60px rgba(0,0,0,.6);max-width:92vw}' +
-      '#kioskPrompt .kp-title{font-family:"Press Start 2P",monospace;font-size:clamp(18px,3vw,30px);color:#10CFC9;margin-bottom:16px;line-height:1.4}' +
-      '#kioskPrompt .kp-sub{font-size:1.1rem;color:#9AA6B2;margin-bottom:22px}' +
-      '#kioskPrompt .kp-sub b{color:#FF2D9B;font-size:1.4rem}' +
-      '#kioskPrompt .kp-btn{font:700 1.05rem Inter,system-ui,sans-serif;background:#10CFC9;color:#06101C;border:0;border-radius:10px;' +
-        'padding:14px 28px;cursor:pointer}' +
-      '#kioskPrompt .kp-btn:hover{filter:brightness(1.1)}';
+      "#kioskPrompt{position:fixed;inset:0;z-index:99999;display:none;align-items:center;justify-content:center;" +
+        "background:rgba(6,10,20,.88);backdrop-filter:blur(6px);font-family:VT323,monospace}" +
+      "#kioskPrompt.show{display:flex}" +
+      "#kioskPrompt .kp-card{position:relative;background:rgba(16,23,42,.96);border:1px solid #10CFC9;padding:34px 44px;text-align:center;" +
+        "color:#dbe8f6;box-shadow:0 0 40px rgba(16,207,201,.3);max-width:92vw}" +
+      "#kioskPrompt .kp-card::before{content:'';position:absolute;inset:0;pointer-events:none;" +
+        "background:repeating-linear-gradient(0deg,transparent,transparent 2px,rgba(0,0,0,.1) 2px,rgba(0,0,0,.1) 4px)}" +
+      "#kioskPrompt .kp-title{font-family:VT323,monospace;font-size:clamp(34px,4vw,54px);line-height:1;letter-spacing:.06em;color:#fff;margin-bottom:12px;text-shadow:0 0 18px rgba(16,207,201,.45)}" +
+      "#kioskPrompt .kp-sub{font-family:'Share Tech Mono',monospace;font-size:.7rem;letter-spacing:.2em;text-transform:uppercase;color:#10CFC9;margin-bottom:22px}" +
+      "#kioskPrompt .kp-sub b{color:#FF2D9B;font-family:VT323,monospace;font-size:1.5rem;letter-spacing:0}" +
+      "#kioskPrompt .kp-btn{font-family:'Share Tech Mono',monospace;font-weight:bold;font-size:.85rem;letter-spacing:.2em;text-transform:uppercase;" +
+        "background:#10CFC9;color:#06222b;border:0;padding:13px 30px;cursor:pointer}" +
+      "#kioskPrompt .kp-btn:hover{filter:brightness(1.15)}";
     document.head.appendChild(css);
   }
 

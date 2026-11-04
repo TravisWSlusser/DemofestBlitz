@@ -68,9 +68,9 @@
   .wm-bubble.on{opacity:1;animation:wmIn .22s steps(4,end) both}
   .wm-bubble.off{opacity:0;animation:wmOut .2s steps(4,end) both}
   @keyframes wmIn{from{opacity:0}to{opacity:1}} @keyframes wmOut{from{opacity:1}to{opacity:0}}
-  .wm-bl{font-family:'Press Start 2P',monospace;font-size:.5rem;letter-spacing:.08em;text-transform:uppercase;line-height:1.6}
-  .wm-bs{font-family:'Press Start 2P',monospace;font-size:1rem;color:#fff;line-height:1.3}
-  .wm-bp{font:600 .62rem Inter,system-ui,sans-serif;color:#9AA6B2}
+  .wm-bl{font-family:'Share Tech Mono',monospace;font-size:.58rem;letter-spacing:.1em;text-transform:uppercase;line-height:1.4}
+  .wm-bs{font-family:VT323,monospace;font-size:2rem;color:#fff;line-height:1}
+  .wm-bp{font-family:'Share Tech Mono',monospace;font-size:.52rem;letter-spacing:.08em;color:#9fb6d8}
   .wm-pin{position:absolute;z-index:4;width:8px;height:8px;border-radius:50%;transform:translate(-50%,-50%);box-shadow:0 0 0 2px rgba(255,255,255,.25),0 0 10px 2px var(--glow,#10CFC9);background:var(--glow,#10CFC9);animation:wmPulse 1.6s ease-in-out infinite}
   @keyframes wmPulse{0%,100%{opacity:.5}50%{opacity:1}}
   `;

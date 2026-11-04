@@ -6,99 +6,123 @@
 <title>Side-Qlik Blitz · Demofest</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&family=Press+Start+2P&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=VT323&family=Share+Tech+Mono&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="assets/booth.css">
 <style>
-  :root{ --ground:#06101C; --sheet:#0E2742; --ink:#E7EBEF; --muted:#9AA6B2; --cyan:#10CFC9; --pink:#FF2D9B; --gold:#F5C542; --line:rgba(255,255,255,.12); }
-  *{ box-sizing:border-box; margin:0; padding:0 }
-  html,body{ height:100% }
-  body{ background:var(--ground); color:var(--ink); font-family:Inter,system-ui,sans-serif; display:flex; flex-direction:column; overflow:hidden }
-  nav{ display:flex; justify-content:space-between; align-items:center; padding:12px 20px; gap:12px }
-  nav .k{ font-family:'Press Start 2P',monospace; font-size:12px; color:var(--cyan); letter-spacing:.05em }
-  nav .links{ display:flex; gap:10px }
-  .btn{ font:700 .92rem Inter,system-ui,sans-serif; color:var(--ink); background:transparent; border:1px solid var(--line); border-radius:9px;
-        padding:9px 14px; cursor:pointer; text-decoration:none }
-  .btn:hover{ border-color:var(--cyan); color:var(--cyan) }
-  .btn.primary{ background:var(--cyan); color:#06101C; border-color:var(--cyan); font-size:1.05rem; padding:14px 26px }
-  .btn.primary:hover{ filter:brightness(1.1); color:#06101C }
-  .btn[disabled]{ opacity:.5; cursor:default }
-  main{ flex:1; min-height:0; padding:0 20px 16px }
-  .view{ display:none; height:100% }
-  .view.show{ display:flex }
+  .content { padding: 0 20px 14px; }
+  nav { display: flex; justify-content: space-between; align-items: center; padding: 12px 0 10px; gap: 12px; }
+  nav .label { font-size: .8rem; }
+  nav .links { display: flex; gap: 8px; }
+  main { flex: 1; min-height: 0; }
+  .view { display: none; height: 100%; }
+  .view.show { display: flex; }
 
-  /* ---- sign-in ---- */
-  #signin{ align-items:center; justify-content:center }
-  .card{ background:var(--sheet); border:1px solid var(--line); border-radius:18px; padding:36px 40px; width:min(520px,94vw); box-shadow:0 20px 60px rgba(0,0,0,.45) }
-  .card h1{ font-family:'Press Start 2P',monospace; font-size:clamp(16px,2vw,24px); line-height:1.4; color:var(--cyan); margin-bottom:8px }
-  .card .sub{ color:var(--muted); margin-bottom:24px }
-  label{ display:block; font-weight:700; font-size:.85rem; color:var(--muted); margin:14px 0 6px; letter-spacing:.04em; text-transform:uppercase }
-  input{ width:100%; font:600 1.1rem Inter,system-ui,sans-serif; color:var(--ink); background:#081A2C; border:1px solid var(--line); border-radius:10px; padding:13px 14px; outline:none }
-  input:focus{ border-color:var(--cyan); box-shadow:0 0 0 3px rgba(16,207,201,.18) }
-  input.tri{ font-family:'Press Start 2P',monospace; font-size:1.5rem; letter-spacing:.35em; text-transform:uppercase; text-align:center; width:11ch }
-  .hint{ font-size:.8rem; color:var(--muted); margin-top:6px }
-  .err{ color:var(--pink); font-weight:700; margin-top:14px; min-height:1.3em }
-  .card .actions{ margin-top:22px; display:flex; justify-content:space-between; align-items:center; gap:12px }
+  /* ---- sign-in: the REC Room login gate ---- */
+  #signin { align-items: center; justify-content: center; }
+  .login-panel {
+    position: relative; width: 100%; max-width: 470px;
+    background: rgba(16,23,42,.92); border: 1px solid var(--cyan);
+    box-shadow: 0 0 40px rgba(16,207,201,.25); padding: 26px 30px 24px; text-align: center;
+  }
+  .login-panel .scan { position: absolute; inset: 0; pointer-events: none;
+    background: repeating-linear-gradient(0deg, transparent, transparent 2px, rgba(0,0,0,.10) 2px, rgba(0,0,0,.10) 4px); }
+  .login-panel > * { position: relative; }
+  .login-panel img.logo { height: 92px; margin-bottom: 4px; filter: drop-shadow(0 0 16px rgba(16,207,201,.5)); }
+  .login-panel h1 { font-family: 'VT323', monospace; font-size: 2.4rem; line-height: 1; letter-spacing: .06em; color: #fff; }
+  .login-sub { font-family: 'Share Tech Mono', monospace; font-size: .6rem; letter-spacing: .3em; color: var(--cyan); text-transform: uppercase; margin: 6px 0 18px; }
+  .login-panel .blurb { font-family: 'VT323', monospace; font-size: 1.15rem; color: var(--muted); line-height: 1.2; margin-bottom: 16px; }
+  .field input.tri { font-size: 2.2rem; letter-spacing: .4em; text-transform: uppercase; text-align: center; width: 9ch; padding-left: .5em; }
+  .err { color: #FF6B6B; font-family: 'Share Tech Mono', monospace; font-size: .62rem; letter-spacing: .05em; min-height: 14px; margin-top: 6px; }
+  .login-btn { width: 100%; margin-top: 8px; padding: 13px; font-size: .85rem; letter-spacing: .2em; }
+  .login-cancel { display: inline-block; background: none; border: none; color: #5b6f8c; font-family: 'Share Tech Mono', monospace; font-size: .62rem;
+    letter-spacing: .15em; text-transform: uppercase; cursor: pointer; margin-top: 12px; text-decoration: none; }
+  .login-cancel:hover { color: #9fb4d0; }
 
   /* ---- arena ---- */
-  #arena{ gap:16px }
-  .stage{ flex:1; min-width:0; display:flex; flex-direction:column; gap:10px }
-  .who{ display:flex; align-items:center; justify-content:space-between; gap:12px; color:var(--muted); font-size:.95rem }
-  .who b{ color:var(--ink) }
-  .who .tri{ font-family:'Press Start 2P',monospace; color:var(--cyan); font-size:.95rem; margin-right:8px }
-  .frame{ position:relative; flex:1; min-height:0; display:flex; align-items:center; justify-content:center }
-  .frame iframe{ width:100%; max-height:100%; aspect-ratio:16/9; border:0; border-radius:12px; background:#000; box-shadow:0 20px 60px rgba(0,0,0,.5) }
-  .toast{ position:absolute; left:50%; top:14px; transform:translateX(-50%) translateY(-20px); background:var(--gold); color:#06101C; font-weight:800;
-          padding:10px 18px; border-radius:10px; opacity:0; pointer-events:none; transition:all .3s ease }
-  .toast.show{ opacity:1; transform:translateX(-50%) translateY(0) }
-  aside{ width:400px; flex:none; background:var(--sheet); border:1px solid var(--line); border-radius:14px; padding:14px 16px 12px; display:flex; flex-direction:column; min-height:0 }
-  aside #map{ margin-bottom:14px; flex:none }
-  aside h2{ font-family:'Press Start 2P',monospace; font-size:13px; color:var(--pink); letter-spacing:.05em; line-height:1.5 }
-  aside .roomhigh{ display:flex; justify-content:space-between; align-items:baseline; margin:12px 0 10px; padding-bottom:10px; border-bottom:1px solid var(--line); color:var(--muted); font-size:.85rem }
-  aside .roomhigh b{ font-family:'Press Start 2P',monospace; color:var(--gold); font-size:15px }
-  .board{ flex:1; overflow:auto; min-height:0 }
-  .row{ display:grid; grid-template-columns:28px 52px 1fr auto; gap:8px; align-items:center; padding:9px 6px; border-radius:8px; font-size:.95rem }
-  .row:nth-child(odd){ background:rgba(255,255,255,.03) }
-  .row.me{ background:rgba(16,207,201,.14); outline:1px solid rgba(16,207,201,.45) }
-  .row .rk{ color:var(--muted); font-weight:700; text-align:right }
-  .row .tr{ font-family:'Press Start 2P',monospace; font-size:.8rem; color:var(--cyan) }
-  .row .nm{ overflow:hidden; white-space:nowrap; text-overflow:ellipsis }
-  .row .sc{ font-weight:800; font-variant-numeric:tabular-nums }
-  .row:nth-child(1) .rk{ color:var(--gold) } .row:nth-child(2) .rk{ color:#CFD6DD } .row:nth-child(3) .rk{ color:#C9803A }
-  .empty{ color:var(--muted); text-align:center; padding:28px 10px; line-height:1.6 }
-  aside .foot{ color:var(--muted); font-size:.75rem; text-align:center; padding-top:8px }
-  @media (max-width:980px){ #arena{ flex-direction:column; overflow:auto } aside{ width:100%; flex:none } aside #map{ max-width:640px; margin:0 auto 14px } .board{ flex:none; max-height:420px } }
+  #arena { gap: 16px; }
+  .stage { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 8px; }
+  .who { display: flex; align-items: center; justify-content: space-between; gap: 12px; font-family: 'Share Tech Mono', monospace; font-size: .62rem; letter-spacing: .12em; text-transform: uppercase; color: var(--muted); }
+  .who b { color: #fff; }
+  .who .tri { font-family: 'VT323', monospace; font-size: 1.5rem; color: var(--cyan); letter-spacing: .08em; margin-right: 10px; text-transform: none; }
+  .frame-wrap { position: relative; flex: 1; min-height: 0; display: flex; align-items: center; justify-content: center; }
+  .game-frame { position: relative; width: 100%; max-height: 100%; aspect-ratio: 16/9; display: flex; }
+  .game-frame iframe { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; display: block; background: #06101f; }
+  .toast { position: absolute; left: 50%; top: 14px; transform: translateX(-50%) translateY(-20px); z-index: 6;
+    background: var(--gold); color: #06101C; font-family: 'Share Tech Mono', monospace; font-weight: bold; font-size: .8rem; letter-spacing: .15em; text-transform: uppercase;
+    padding: 10px 18px; opacity: 0; pointer-events: none; transition: all .3s ease; }
+  .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+
+  aside { width: 400px; flex: none; display: flex; flex-direction: column; gap: 12px; min-height: 0; }
+  aside .map-panel { position: relative; flex: none; padding: 0; overflow: hidden; }
+  aside .map-panel .panel-title { position: absolute; top: 8px; left: 12px; right: 12px; z-index: 5; margin: 0; }
+  aside #map { padding-top: 30px; }
+  aside .board-panel { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+  .roomhigh { display: flex; justify-content: space-between; align-items: baseline; margin: 2px 0 6px; padding-bottom: 6px; border-bottom: 1px solid rgba(16,207,201,.12);
+    font-family: 'Share Tech Mono', monospace; font-size: .55rem; letter-spacing: .12em; text-transform: uppercase; color: var(--muted); }
+  .roomhigh b { font-family: 'VT323', monospace; font-size: 1.6rem; color: var(--gold); letter-spacing: .04em; }
+  .board { flex: 1; overflow: auto; min-height: 0; }
+  .row { display: grid; grid-template-columns: 24px 24px 56px 1fr auto; gap: 8px; align-items: center; padding: 5px 8px; margin-bottom: 4px;
+    background: rgba(16,207,201,.05); border: 1px solid rgba(16,207,201,.18); font-family: 'VT323', monospace; font-size: 1.45rem; }
+  .row.me { background: rgba(16,207,201,.16); border-color: var(--cyan); box-shadow: 0 0 12px rgba(16,207,201,.25); }
+  .row .rk { color: var(--muted); text-align: right; font-size: 1.1rem; }
+  .row .md { width: 22px; height: 22px; object-fit: contain; }
+  .row .tr { color: var(--cyan); letter-spacing: .05em; }
+  .row .nm { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; color: var(--ink); }
+  .row .sc { color: #fff; }
+  .row:nth-child(1) .rk { color: var(--gold); } .row:nth-child(2) .rk { color: #CFD6DD; } .row:nth-child(3) .rk { color: #C9803A; }
+  .empty { font-family: 'Share Tech Mono', monospace; font-size: .6rem; letter-spacing: .12em; text-transform: uppercase; color: var(--dim); text-align: center; padding: 28px 10px; line-height: 1.8; }
+  aside .foot { font-family: 'Share Tech Mono', monospace; font-size: .5rem; letter-spacing: .12em; text-transform: uppercase; color: var(--dim); text-align: center; padding-top: 6px; }
+
+  @media (max-width:980px){ body{ overflow:auto } .content{ height:auto; min-height:100% } #arena{ flex-direction:column } aside{ width:100%; flex:none } aside .map-panel{ max-width:640px; margin:0 auto } .board{ flex:none; max-height:420px } }
 </style>
 </head>
 <body>
+  <video class="bg-video" autoplay muted loop playsinline>
+    <source src="assets/brand/RecRoom_bg_loop1.webm" type="video/webm">
+  </video>
+  <div class="bg-overlay"></div>
+  <div class="scanlines"></div>
+
+  <div class="content">
   <nav>
-    <span class="k">SIDE-QLIK BLITZ · DEMOFEST</span>
+    <span class="label">Side-Qlik Blitz &nbsp;·&nbsp; Demofest</span>
     <div class="links">
-      <button class="btn" id="switchBtn" type="button" hidden>Switch player</button>
-      <a class="btn" href="index.html" id="homeBtn">Start over</a>
+      <button class="btn ghost" id="switchBtn" type="button" hidden>Switch player</button>
+      <a class="btn ghost" href="index.html" id="homeBtn">Start over</a>
     </div>
   </nav>
 
   <main>
     <!-- ======== SIGN-IN ======== -->
     <section id="signin" class="view show">
-      <form class="card" id="form" autocomplete="off" novalidate>
-        <h1>Insert Coin</h1>
-        <div class="sub">Three letters go on the board. Your name and email stay with us so we can say thanks after the show.</div>
-        <label for="name">Name</label>
-        <input id="name" name="name" type="text" maxlength="80" required placeholder="Your name" autocomplete="name" autocapitalize="words">
-        <label for="email">Email</label>
-        <input id="email" name="email" type="email" maxlength="160" required placeholder="you@company.com" autocomplete="email" inputmode="email" autocapitalize="off">
-        <label for="trigram">Your three-letter tag</label>
-        <input id="trigram" name="trigram" class="tri" type="text" maxlength="3" required placeholder="ABC" pattern="[A-Za-z]{3}" autocapitalize="characters" spellcheck="false">
-        <div class="hint">Initials work. This is what shows on the leaderboard.</div>
-        <label for="place">Where are you from?</label>
-        <input id="place" name="place" type="text" maxlength="80" list="places" placeholder="State or country" autocomplete="off" autocapitalize="words">
-        <datalist id="places"></datalist>
-        <div class="hint">Puts your runs on the map. Optional.</div>
-        <div class="err" id="err" role="alert"></div>
-        <div class="actions">
-          <a class="btn" href="index.html">&larr; Back</a>
-          <button class="btn primary" id="go" type="submit">Play &rarr;</button>
+      <form class="login-panel" id="form" autocomplete="off" novalidate>
+        <div class="scan"></div>
+        <img class="logo" src="assets/brand/RecRoom_Logo1.png" alt="REC ROOM">
+        <h1>INSERT COIN</h1>
+        <div class="login-sub">Sign in to play · Demofest</div>
+        <div class="blurb">Three letters go on the board. Your name and email stay with us so we can say thanks after the show.</div>
+        <div class="field">
+          <label for="name">Name</label>
+          <input id="name" name="name" type="text" maxlength="80" required placeholder="Your name" autocomplete="name" autocapitalize="words">
         </div>
+        <div class="field">
+          <label for="email">Email</label>
+          <input id="email" name="email" type="email" maxlength="160" required placeholder="you@company.com" autocomplete="email" inputmode="email" autocapitalize="off">
+        </div>
+        <div class="field">
+          <label for="trigram">Your three-letter tag</label>
+          <input id="trigram" name="trigram" class="tri" type="text" maxlength="3" required placeholder="ABC" pattern="[A-Za-z]{3}" autocapitalize="characters" spellcheck="false">
+          <div class="hint">Initials work. This is what shows on the leaderboard.</div>
+        </div>
+        <div class="field">
+          <label for="place">Where are you from?</label>
+          <input id="place" name="place" type="text" maxlength="80" list="places" placeholder="State or country" autocomplete="off" autocapitalize="words">
+          <datalist id="places"></datalist>
+          <div class="hint">Puts your runs on the map. Optional.</div>
+        </div>
+        <div class="err" id="err" role="alert"></div>
+        <button class="btn login-btn" id="go" type="submit">Play &rarr;</button>
+        <a class="login-cancel" href="index.html">&larr; Back</a>
       </form>
     </section>
 
@@ -107,22 +131,31 @@
       <div class="stage">
         <div class="who">
           <div><span class="tri" id="whoTri">ABC</span><b id="whoName">Player</b> <span id="whoBest"></span></div>
-          <div id="status">Loading the arcade…</div>
+          <div id="status" class="status-online">Loading the arcade…</div>
         </div>
-        <div class="frame">
-          <iframe id="game" title="Side-Qlik Blitz" allow="autoplay; fullscreen" tabindex="0"></iframe>
-          <div class="toast" id="toast"></div>
+        <div class="frame-wrap">
+          <div class="game-frame frame">
+            <div class="corner tl"></div><div class="corner tr"></div><div class="corner bl"></div><div class="corner br"></div>
+            <iframe id="game" title="Side-Qlik Blitz" allow="autoplay; fullscreen" tabindex="0"></iframe>
+            <div class="toast" id="toast"></div>
+          </div>
         </div>
       </div>
       <aside>
-        <div id="map" title="Recent runs, live from wherever people came from"></div>
-        <h2>DEMOFEST<br>TOP SCORES</h2>
-        <div class="roomhigh"><span>High score to beat</span><b id="roomHigh">—</b></div>
-        <div class="board" id="board"><div class="empty">Loading…</div></div>
-        <div class="foot">Best single run per player · updates live</div>
+        <div class="panel map-panel">
+          <div class="panel-title">Live from the floor <span class="status-online">Online</span></div>
+          <div id="map" title="Recent runs, live from wherever people came from"></div>
+        </div>
+        <div class="panel board-panel">
+          <div class="panel-title">Demofest Top Scores</div>
+          <div class="roomhigh"><span>High score to beat</span><b id="roomHigh">—</b></div>
+          <div class="board" id="board"><div class="empty">Loading…</div></div>
+          <div class="foot">Best single run per player · updates live</div>
+        </div>
       </aside>
     </section>
   </main>
+  </div>
 
   <script src="assets/kiosk.js"></script>
   <script src="assets/places.js"></script>
@@ -277,13 +310,14 @@
       const top = rows.slice(0, BOARD_ROWS);
       let html = top.map((p, i) => row(p, i + 1, p.id === me)).join('');
       const myIdx = rows.findIndex(p => p.id === me);
-      if (myIdx >= BOARD_ROWS) html += '<div class="row"><span class="rk">…</span><span></span><span></span><span></span></div>' + row(rows[myIdx], myIdx + 1, true);
+      if (myIdx >= BOARD_ROWS) html += '<div class="row"><span class="rk">…</span><span></span><span></span><span></span><span></span></div>' + row(rows[myIdx], myIdx + 1, true);
       b.innerHTML = html;
     } catch (_) { /* keep the last good board */ }
   }
   const esc = s => String(s).replace(/[&<>"']/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c]));
   function row(p, rank, mine){
-    return '<div class="row' + (mine ? ' me' : '') + '"><span class="rk">' + rank + '</span><span class="tr">' + esc(p.trigram) + '</span>' +
+    const medal = rank <= 3 ? '<img class="md" src="assets/brand/medal_' + ['first','second','third'][rank - 1] + '.png" alt="">' : '<span></span>';
+    return '<div class="row' + (mine ? ' me' : '') + '"><span class="rk">' + rank + '</span>' + medal + '<span class="tr">' + esc(p.trigram) + '</span>' +
            '<span class="nm">' + esc(firstName(p.name)) + '</span><span class="sc">' + (p.high || 0).toLocaleString() + '</span></div>';
   }
   function firstName(n){ const parts = String(n || '').trim().split(/\s+/); return parts.length > 1 ? parts[0] + ' ' + parts[parts.length - 1][0] + '.' : parts[0] || ''; }

@@ -1,0 +1,110 @@
+/* Demofest booth chrome — the REC Room's design language, lifted from
+   QlikRecRoom/index.html so the booth reads as the same universe:
+   VT323 display type, Share Tech Mono labels, cyan on night-sky navy,
+   corner brackets, scanlines over a blurred video backdrop.
+   The game itself (game/) is untouched; this is only the room around it. */
+
+:root {
+  --cyan:    #10CFC9;
+  --bg-dark: #10172A;   /* panels, map, scoreboard interior */
+  --navy:    #11304D;   /* Mission Control surface */
+  --nam:     #9B59FF;
+  --latam:   #FF2D9B;
+  --emea:    #FF6B35;
+  --apac:    #10CFC9;
+  --dim:     #35435D;
+  --ink:     #dbe8f6;
+  --muted:   #9fb6d8;
+  --gold:    #F5C542;
+}
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { height: 100%; }
+body {
+  background: var(--bg-dark);
+  color: #fff;
+  font-family: 'VT323', monospace;
+  overflow: hidden;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* ---- backdrop: the REC Room's loop, blurred, under a navy wash and scanlines ---- */
+.bg-video  { position: fixed; inset: 0; width: 100%; height: 100%; object-fit: cover; filter: blur(4px) brightness(.6); z-index: 0; }
+.bg-overlay{ position: fixed; inset: 0; background: rgba(16,23,42,.62); z-index: 1; }
+.scanlines { position: fixed; inset: 0; pointer-events: none; z-index: 2;
+  background: repeating-linear-gradient(0deg, transparent, transparent 2px, rgba(0,0,0,.07) 2px, rgba(0,0,0,.07) 4px); }
+.content   { position: relative; z-index: 3; height: 100%; display: flex; flex-direction: column; }
+
+/* ---- type ---- */
+.label {
+  font-family: 'Share Tech Mono', monospace; font-size: .7rem; letter-spacing: .35em;
+  color: var(--cyan); text-transform: uppercase;
+}
+.label.dim { color: var(--muted); opacity: .8; }
+.display { font-family: 'VT323', monospace; letter-spacing: .04em; line-height: 1; }
+
+/* ---- the framed surface: cyan hairline, inner shadow, bracketed corners ---- */
+.frame {
+  position: relative; background: var(--bg-dark);
+  border: 1px solid var(--cyan);
+  box-shadow: 0 0 30px rgba(16,207,201,.18), inset 0 0 60px rgba(0,0,0,.5);
+}
+.corner { position: absolute; width: 28px; height: 28px; border-color: var(--cyan); border-style: solid; pointer-events: none; z-index: 4; }
+.corner.tl { top: -1px; left: -1px;     border-width: 3px 0 0 3px; }
+.corner.tr { top: -1px; right: -1px;    border-width: 3px 3px 0 0; }
+.corner.bl { bottom: -1px; left: -1px;  border-width: 0 0 3px 3px; }
+.corner.br { bottom: -1px; right: -1px; border-width: 0 3px 3px 0; }
+
+.panel { background: var(--bg-dark); border: 1px solid rgba(16,207,201,.25); padding: 10px 12px; }
+.panel-title {
+  font-family: 'Share Tech Mono', monospace; font-size: .62rem; letter-spacing: .25em;
+  color: var(--cyan); text-transform: uppercase; border-bottom: 1px solid rgba(16,207,201,.18);
+  padding-bottom: 6px; margin-bottom: 8px; display: flex; align-items: center; justify-content: space-between;
+}
+
+/* ---- buttons ---- */
+.btn {
+  display: inline-block; font-family: 'Share Tech Mono', monospace; font-size: .8rem; letter-spacing: .18em;
+  text-transform: uppercase; font-weight: bold; color: #06222b; background: var(--cyan); border: 1px solid var(--cyan);
+  padding: 12px 26px; cursor: pointer; text-decoration: none; transition: filter .15s ease, background .15s ease, color .15s ease;
+}
+.btn:hover { filter: brightness(1.15); }
+.btn:disabled { background: #243247; border-color: #243247; color: #7f93ad; cursor: default; filter: none; }
+.btn.ghost { background: transparent; color: var(--cyan); border-color: rgba(16,207,201,.4); font-weight: normal; font-size: .66rem; padding: 9px 14px; }
+.btn.ghost:hover { border-color: var(--cyan); background: rgba(16,207,201,.1); filter: none; }
+.btn.orange { background: var(--emea); border-color: var(--emea); }
+
+/* ---- sign-in fields (the REC Room login gate) ---- */
+.field { text-align: left; margin-bottom: 14px; position: relative; }
+.field label {
+  font-family: 'Share Tech Mono', monospace; font-size: .58rem; letter-spacing: .2em; color: var(--cyan);
+  text-transform: uppercase; display: block; margin-bottom: 5px;
+}
+.field input {
+  width: 100%; background: #0c1322; border: 1px solid rgba(16,207,201,.4); color: #fff;
+  font-family: 'VT323', monospace; font-size: 1.45rem; padding: 8px 10px; outline: none; border-radius: 0;
+}
+.field input:focus { border-color: var(--cyan); box-shadow: 0 0 10px rgba(16,207,201,.35); }
+.field input::placeholder { color: #44597a; }
+.field .hint { font-family: 'Share Tech Mono', monospace; font-size: .55rem; letter-spacing: .08em; color: #5b6f8c; margin-top: 5px; }
+
+/* ---- pulsing online status ---- */
+.status-online {
+  font-family: 'Share Tech Mono', monospace; font-size: .55rem; color: var(--cyan); letter-spacing: .1em;
+  display: inline-flex; align-items: center; gap: 6px; text-transform: uppercase;
+}
+.status-online::before { content: ''; width: 7px; height: 7px; border-radius: 50%; background: var(--cyan); animation: statusPulse 1.6s ease-in-out infinite; }
+@keyframes statusPulse {
+  0%, 100% { opacity: .35; box-shadow: 0 0 2px rgba(16,207,201,.4); }
+  50%      { opacity: 1;   box-shadow: 0 0 10px 2px rgba(16,207,201,.95); }
+}
+
+/* ---- blinking cursor on a label ---- */
+.cursor::after { content: '_'; animation: blink 1s steps(1) infinite; }
+@keyframes blink { 50% { opacity: 0; } }
+
+/* ---- scheme colours ---- */
+.nam { color: var(--nam); } .latam { color: var(--latam); } .emea { color: var(--emea); } .apac { color: var(--apac); }
+
+/* [hidden] must beat .btn{display:inline-block} (the REC Room .mcard lesson) */
+[hidden] { display: none !important; }

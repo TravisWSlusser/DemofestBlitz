@@ -6,34 +6,85 @@
 <title>The Stellar-Seller Universe</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&family=Press+Start+2P&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=VT323&family=Share+Tech+Mono&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="assets/booth.css">
 <style>
-  :root{ --ground:#06101C; --ink:#E7EBEF; --muted:#9AA6B2; --gold:#F5C542; }
-  *{ box-sizing:border-box; margin:0; padding:0 }
-  html,body{ height:100% }
-  body{ background:var(--ground); color:var(--ink); font-family:Inter,system-ui,sans-serif; display:flex; flex-direction:column }
-  nav{ display:flex; justify-content:space-between; align-items:center; padding:16px 22px }
-  nav a{ color:var(--muted); text-decoration:none; font-weight:700 }
-  nav a:hover{ color:var(--ink) }
-  nav .k{ font-family:'Press Start 2P',monospace; font-size:12px; color:var(--gold) }
-  main{ flex:1; display:flex; flex-direction:column; align-items:center; justify-content:center; text-align:center; padding:24px }
-  h1{ font-family:'Press Start 2P',monospace; font-size:clamp(20px,3.2vw,40px); line-height:1.35; color:var(--gold); max-width:20ch; text-wrap:balance }
-  p{ margin-top:20px; color:var(--muted); max-width:52ch; font-size:1.1rem }
-  .slot{ margin-top:34px; width:min(900px,92vw); aspect-ratio:16/9; border:2px dashed rgba(245,197,66,.45); border-radius:16px;
-         display:flex; align-items:center; justify-content:center; color:var(--muted); font-size:.95rem }
+  body { overflow: auto; }
+  .content { height: auto; min-height: 100%; max-width: 1500px; margin: 0 auto; padding: 0 32px 30px; }
+  nav { display: flex; justify-content: space-between; align-items: center; padding: 16px 0 10px; gap: 12px; }
+  nav .label { font-size: .8rem; color: var(--emea); }
+
+  .hero { position: relative; display: grid; grid-template-columns: 1.2fr 1fr; gap: 28px; align-items: center; padding: 26px 30px; margin-bottom: 22px; border-color: var(--emea); box-shadow: 0 0 30px rgba(255,107,53,.18), inset 0 0 60px rgba(0,0,0,.5); }
+  .hero .corner { border-color: var(--emea); }
+  .hero .wordmark { width: 100%; filter: drop-shadow(0 8px 22px rgba(0,0,0,.6)); }
+  .hero h1 { font-family: 'VT323', monospace; font-size: clamp(34px, 4.2vw, 64px); line-height: .95; letter-spacing: .04em; margin: 18px 0 12px; text-shadow: 0 0 18px rgba(255,107,53,.35); }
+  .hero p { font-family: 'VT323', monospace; font-size: clamp(19px, 1.5vw, 25px); line-height: 1.2; color: var(--muted); max-width: 46ch; }
+  .hero .scene { position: relative; height: clamp(260px, 38vh, 440px); display: flex; align-items: center; justify-content: center; }
+  .hero .cover { height: 100%; transform: rotate(-5deg); border: 2px solid rgba(255,255,255,.08); box-shadow: 0 18px 50px rgba(0,0,0,.65); }
+  .hero .sidekick { position: absolute; right: 0; bottom: -4%; height: 58%; filter: drop-shadow(0 0 22px rgba(155,89,255,.55)); animation: hover 3.2s ease-in-out infinite; }
+  @keyframes hover { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-10px); } }
+
+  .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 22px; }
+  .lineup { display: flex; justify-content: space-around; align-items: flex-end; gap: 8px; padding: 10px 6px 0; }
+  .lineup figure { display: flex; flex-direction: column; align-items: center; gap: 6px; flex: 1; }
+  .lineup img { height: clamp(70px, 11vh, 130px); filter: drop-shadow(0 0 12px rgba(0,0,0,.7)); transition: transform .15s ease; }
+  .lineup figure:hover img { transform: translateY(-6px) scale(1.06); }
+  .lineup figcaption { font-family: 'Share Tech Mono', monospace; font-size: .55rem; letter-spacing: .12em; text-transform: uppercase; color: var(--muted); }
+
+  .slot { min-height: 240px; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; gap: 10px; }
+  .slot .big { font-family: 'VT323', monospace; font-size: 2rem; color: var(--dim); letter-spacing: .06em; }
+  .slot .label { color: var(--dim); }
+
+  @media (max-width: 900px) { .hero, .grid { grid-template-columns: 1fr; } .hero .scene { height: 300px; } }
 </style>
 </head>
 <body>
-  <nav>
-    <a href="index.html">&larr; Start over</a>
-    <span class="k">THE STELLAR-SELLER UNIVERSE</span>
-    <a href="play.html">Play Blitz &rarr;</a>
-  </nav>
-  <main>
-    <h1>Explore the Stellar-Seller Universe</h1>
-    <p>Placeholder. Comic panels, the character lineup, the Mission Control and REC Room walkthrough — whatever you want people at the table to see goes here.</p>
-    <div class="slot">[ your content here ]</div>
-  </main>
+  <video class="bg-video" autoplay muted loop playsinline>
+    <source src="assets/brand/RecRoom_bg_loop1.webm" type="video/webm">
+  </video>
+  <div class="bg-overlay"></div>
+  <div class="scanlines"></div>
+
+  <div class="content">
+    <nav>
+      <a class="btn ghost" href="index.html">&larr; Start over</a>
+      <span class="label">The Stellar-Seller Universe</span>
+      <a class="btn ghost" href="play.html">Play Blitz &rarr;</a>
+    </nav>
+
+    <section class="hero frame">
+      <div class="corner tl"></div><div class="corner tr"></div><div class="corner bl"></div><div class="corner br"></div>
+      <div>
+        <img class="wordmark" src="assets/brand/StellarSellerLogo_01.png" alt="Stellar-Seller and the Side-Qlik">
+        <h1>A COMIC THAT BECAME<br>AN ENABLEMENT PLATFORM</h1>
+        <p>Stellar-Seller is the seller as hero. Side-Qlik is the AI sidekick. The D.O.R.C.S. are everything standing between a rep and a closed deal. Mission Control, the REC Room and Side-Qlik Blitz all live in this universe.</p>
+      </div>
+      <div class="scene">
+        <img class="cover" src="assets/brand/Comic_Cover_01.png" alt="Issue #1 — The First Adventure">
+        <img class="sidekick" src="assets/brand/sideqlik1.png" alt="Side-Qlik">
+      </div>
+    </section>
+
+    <div class="grid">
+      <section class="panel">
+        <div class="panel-title">The D.O.R.C.S. <span>Difficult Obstacles Reducing Closed Sales</span></div>
+        <div class="lineup">
+          <figure><img src="assets/brand/Fogg_01.png" alt="The Fogg"><figcaption>The Fogg</figcaption></figure>
+          <figure><img src="assets/brand/Boogie_01.png" alt="The Boogie"><figcaption>The Boogie</figcaption></figure>
+          <figure><img src="assets/brand/Jump_Start_01.png" alt="Jump Start"><figcaption>Jump Start</figcaption></figure>
+          <figure><img src="assets/brand/Drat_Pack_01.png" alt="The Drat Pack"><figcaption>Drat Pack</figcaption></figure>
+          <figure><img src="assets/brand/South_Paw_01.png" alt="South Paw"><figcaption>South Paw</figcaption></figure>
+          <figure><img src="assets/brand/Blocks_01.png" alt="The Blocks"><figcaption>The Blocks</figcaption></figure>
+        </div>
+      </section>
+      <section class="panel slot">
+        <div class="panel-title" style="align-self:stretch">Program Interface</div>
+        <div class="big">[ YOUR CONTENT HERE ]</div>
+        <div class="label">comic pages · video · the Mission Control walkthrough</div>
+      </section>
+    </div>
+  </div>
+
   <script src="assets/kiosk.js"></script>
   <script>
     // Longer leash than the arcade: people read this one. Tune here.
