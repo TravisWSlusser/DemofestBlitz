@@ -114,7 +114,7 @@ body {
    y: 6 rows) — background-position percentages step 100/7 and 100/5 because the image is
    8x / 6x the element. Pick colour + mood with an inline background-image. ---- */
 .dorc {
-  --s: 120px; width: var(--s); height: var(--s); flex: none;
+  --s: 120px; width: var(--s); aspect-ratio: 1 / 1; height: auto; flex: none;   /* square whatever max-width does */
   background-repeat: no-repeat; background-size: 800% 600%; background-position: 0 0;
   animation: dorcX .444s steps(8) infinite, dorcY 2.667s steps(6) infinite;
   filter: drop-shadow(0 6px 14px rgba(0,0,0,.6));
