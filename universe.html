@@ -42,9 +42,11 @@
   .card { display: flex; flex-direction: column; padding: 14px 16px 18px; }
   .card .pic { height: clamp(200px, 30vh, 300px); display: flex; align-items: center; justify-content: center; margin: 6px 0 12px; }
   .card .pic img { max-height: 100%; max-width: 100%; object-fit: contain; filter: drop-shadow(0 12px 26px rgba(0,0,0,.6)); }
-  .card .pic.gang { gap: 0; align-items: flex-end; }
-  .card .pic.gang img { max-width: 40%; max-height: 92%; }
-  .card .pic.gang img:nth-child(2) { max-height: 100%; margin: 0 -6%; z-index: 1; }
+  .card .pic.gang { position: relative; overflow: hidden; }
+  .card .pic.gang img { position: absolute; bottom: 0; height: 72%; width: auto; max-width: none; }
+  .card .pic.gang img:nth-child(1) { left: -16%; }
+  .card .pic.gang img:nth-child(3) { right: -16%; }
+  .card .pic.gang img:nth-child(2) { left: 50%; transform: translateX(-50%); height: 100%; z-index: 1; }
   .card .nm { font-family: 'VT323', monospace; font-size: 2.1rem; line-height: 1; letter-spacing: .05em; color: #fff; margin: 4px 0 8px; }
   .card .role { font-size: .6rem; }
   .card .prose { font-size: clamp(17px, 1.2vw, 21px); }
@@ -52,9 +54,9 @@
 
   /* ---- case-file database (the DevLearn site's DORCS DECLASSIFIED, in booth chrome) ---- */
   .roster { display: grid; grid-template-columns: repeat(6, 1fr); gap: 10px; max-width: 900px; margin: 0 auto 18px; }
-  .suspect { position: relative; aspect-ratio: 1; overflow: hidden; cursor: pointer; background: #0a1024; border: 1px solid rgba(124,92,255,.3);
+  .suspect { position: relative; aspect-ratio: 729 / 560; overflow: hidden; cursor: pointer; background: #0a1024; border: 1px solid rgba(124,92,255,.3);
     transition: transform .15s, box-shadow .2s, border-color .2s; }
-  .suspect img { position: absolute; bottom: 0; left: 50%; transform: translateX(-50%); width: 92%; height: auto; }
+  .suspect img { position: absolute; bottom: 0; left: 50%; transform: translateX(-50%); width: 100%; height: auto; }
   .suspect::after { content: ""; position: absolute; inset: 0; pointer-events: none; box-shadow: inset 0 -34px 30px -20px rgba(0,0,0,.75); }
   .suspect::before { content: ""; position: absolute; inset: 0; z-index: 0; background: radial-gradient(circle at 50% 115%, var(--c) 0%, transparent 62%); opacity: .35; transition: opacity .2s; }
   .suspect .no { position: absolute; top: 6px; left: 8px; z-index: 2; font-family: 'Share Tech Mono', monospace; font-size: .55rem; letter-spacing: .14em; color: rgba(255,255,255,.7); }
