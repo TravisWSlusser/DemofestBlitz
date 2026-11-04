@@ -28,6 +28,16 @@
   .hero h1 { font-family: 'VT323', monospace; font-size: clamp(34px, 3.8vw, 58px); line-height: .95; letter-spacing: .04em; margin: 18px 0 12px; text-shadow: 0 0 18px rgba(255,107,53,.35); }
   .hero .duo { width: 100%; max-height: 46vh; object-fit: contain; filter: drop-shadow(0 18px 40px rgba(0,0,0,.6)); }
 
+  /* ---- films ---- */
+  .films { display: grid; grid-template-columns: repeat(3, 1fr); gap: 18px; }
+  .film { padding: 10px 10px 12px; }
+  .film .screen { position: relative; aspect-ratio: 16 / 9; background: #06101f; border: 1px solid rgba(16,207,201,.3); overflow: hidden; }
+  .film .screen iframe { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; }
+  .film .meta { padding: 10px 4px 0; }
+  .film .t { font-family: 'VT323', monospace; font-size: 1.6rem; line-height: 1; letter-spacing: .04em; color: #fff; }
+  .film .d { font-size: .55rem; margin-top: 5px; }
+  @media (max-width: 980px) { .films { grid-template-columns: 1fr; } }
+
   /* ---- cast ---- */
   .cast { display: grid; grid-template-columns: repeat(3, 1fr); gap: 18px; }
   .card { display: flex; flex-direction: column; padding: 14px 16px 18px; }
@@ -67,7 +77,7 @@
   .brief .counter { display: flex; align-items: center; gap: 14px; border-top: 1px solid rgba(16,207,201,.3); padding-top: 14px; margin-top: auto; }
   .brief .counter img { width: 72px; height: 72px; border-radius: 50%; flex: none; box-shadow: 0 0 18px rgba(16,207,201,.4); background: #0c1322; }
   .brief .counter .k { color: var(--cyan); }
-  .brief .counter .tool { font-family: 'VT323', monospace; font-size: 1.7rem; line-height: 1; color: #fff; letter-spacing: .03em; }
+  .brief .counter .tool { font-family: 'VT323', monospace; font-size: 1.35rem; line-height: 1.15; color: #fff; letter-spacing: .03em; }
   .brief .nav-hint { font-size: .5rem; color: var(--dim); margin-top: 4px; }
 
   footer { margin-top: 26px; display: flex; justify-content: center; align-items: center; gap: 18px; }
@@ -108,6 +118,28 @@
       <img class="duo" src="assets/brand/stellar_and_sideqlik.png" alt="Stellar-Seller and Side-Qlik, back to back">
     </section>
 
+    <!-- ======== THE FILMS ======== -->
+    <section class="sec">
+      <div class="sec-head">
+        <div class="h">THE FILMS</div>
+        <div class="label s">Where the universe came from &middot; sound on</div>
+      </div>
+      <div class="films">
+        <div class="panel film">
+          <div class="screen"><iframe src="https://www.youtube-nocookie.com/embed/DNnI-sHJRVM?rel=0&modestbranding=1&playsinline=1" title="The video that started it all" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; fullscreen" allowfullscreen loading="lazy"></iframe></div>
+          <div class="meta"><div class="label d" style="color:var(--gold)">Origin</div><div class="t">THE ONE THAT STARTED IT ALL</div></div>
+        </div>
+        <div class="panel film">
+          <div class="screen"><iframe src="https://www.youtube-nocookie.com/embed/mabVLJKwC3g?rel=0&modestbranding=1&playsinline=1" title="SKO kickoff, part 1" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; fullscreen" allowfullscreen loading="lazy"></iframe></div>
+          <div class="meta"><div class="label d">Sales Kickoff &middot; Part 1</div><div class="t">HOW WE OPENED SKO</div></div>
+        </div>
+        <div class="panel film">
+          <div class="screen"><iframe src="https://www.youtube-nocookie.com/embed/OZpbr4kzKf8?rel=0&modestbranding=1&playsinline=1" title="SKO kickoff, part 2" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; fullscreen" allowfullscreen loading="lazy"></iframe></div>
+          <div class="meta"><div class="label d">Sales Kickoff &middot; Part 2</div><div class="t">THE KICKOFF, CONTINUED</div></div>
+        </div>
+      </div>
+    </section>
+
     <!-- ======== THE CAST ======== -->
     <section class="sec">
       <div class="sec-head">
@@ -139,9 +171,9 @@
     <!-- ======== CASE FILES ======== -->
     <section class="sec">
       <div class="sec-head">
-        <div class="h">DORCS DECLASSIFIED</div>
+        <div class="h">D.O.R.C.S. FIELD GUIDE</div>
         <div class="label s">Difficult Obstacles Reducing Closed Sales</div>
-        <p class="b">These are the hidden blockers that quietly derail sales momentum &mdash; not mistakes or a lack of effort, just familiar daily patterns where progress slows, confidence dips, or clarity vanishes right when it&rsquo;s needed most. The creatures merely put a face to the issue. The goal isn&rsquo;t to pretend they don&rsquo;t exist. It&rsquo;s to recognize who they are &mdash; and know what beats them. <b style="color:var(--cyan)">Select a suspect to open the case file.</b></p>
+        <p class="b">In Side-Qlik Blitz the D.O.R.C.S. come in colours and pile up from the top of the board. Five are on the roster from your first shot. Three more only show up when you beat the Demofest high score mid-run &mdash; proof you are playing at the top of the room. Every one of them goes down the same way: a data orb landing on two or more of the same colour. <b style="color:var(--cyan)">Select a specimen to open its file.</b></p>
       </div>
       <div class="roster" id="roster"></div>
       <div class="dossier frame">
@@ -155,13 +187,13 @@
             <div class="label cno" id="caseNo">Case file #01</div>
             <div class="nm" id="caseName">THE BLOCKS</div>
           </div>
-          <div class="field"><div class="k">Known for</div><div class="v" id="caseBlocker"></div></div>
-          <div class="field"><div class="k">Threat assessment</div><div class="v" id="caseThreat"></div></div>
+          <div class="field"><div class="k">Roster status</div><div class="v" id="caseStatus"></div></div>
+          <div class="field"><div class="k">Field notes</div><div class="v" id="caseNotes"></div></div>
           <div class="counter">
-            <img id="caseGif" src="" alt="">
-            <div><div class="k">Countermeasure</div><div class="tool" id="caseTool"></div></div>
+            <img id="caseGif" src="assets/brand/brain_freeze.png" alt="">
+            <div><div class="k">How it goes down</div><div class="tool" id="caseWeak"></div></div>
           </div>
-          <div class="label nav-hint">Files rotate on their own &middot; tap any suspect to hold one open</div>
+          <div class="label nav-hint">Files rotate on their own &middot; tap any specimen to hold one open</div>
         </div>
       </div>
     </section>
@@ -180,21 +212,24 @@
   const CASE_ROTATE_MS = 10000;               // the dossier flips to the next file on its own…
   const CASE_HOLD_MS   = 45000;               // …unless someone picked one, then it holds this long
 
-  /* The six case files, verbatim from the DevLearn site's DORCS database.
-     `img` is the full-size render; `c` is the file colour. */
+  /* The arcade roster, straight from the game's PALETTE and its colour-unlock rule:
+     five colours live from the first shot; teal, orange and pink enter the board as the
+     run crosses the Demofest high score, +1,000 and +2,000. No purple or teal render was
+     supplied, so those two sit in the lore text rather than the roster. */
+  const WEAK = 'A data orb landing on 2+ of the same colour drops the whole cluster.';
   const CASES = [
-    { no:'01', name:'THE BLOCKS',     c:'#ff8a3d', img:'assets/brand/dorc_orange.png', blocker:'Searching for answers when you should be selling.',
-      threat:'Selling time bleeds away hunting for information that should be at your fingertips.', tool:'Mindtickle Copilot', gif:'assets/brand/tool_copilot.webp' },
-    { no:'02', name:'THE JUMP-START', c:'#ffd23d', img:'assets/brand/dorc_yellow.png', blocker:'Learning comes too late and takes too long.',
-      threat:'Enablement lands after the moment of need and eats hours you don’t have.', tool:'AI Sales Learning Modules', gif:'assets/brand/tool_learning.webp' },
-    { no:'03', name:'THE BOOGIE',     c:'#3ddc84', img:'assets/brand/dorc_green.png',  blocker:'Unable to practice the pitch.',
-      threat:'You go live without a safe place to rehearse and sharpen the message first.', tool:'Mindtickle AI Role Plays', gif:'assets/brand/tool_roleplays.webp' },
-    { no:'04', name:'THE DRAT-PACK',  c:'#ff2d9b', img:'assets/brand/dorc_pink.png',   blocker:'Meeting review and follow-up is time-consuming.',
-      threat:'Post-call notes and next steps swallow the time you could spend selling.', tool:'Mindtickle Call AI (Notetaker)', gif:'assets/brand/tool_callai.webp' },
-    { no:'05', name:'THE FOGG',       c:'#c0392b', img:'assets/brand/dorc_red.png',    blocker:'The full story of the deal is scattered.',
-      threat:'Deal context lives in ten places, so the whole picture is never in one view.', tool:'Mindtickle Deal Guides', gif:'assets/brand/tool_dealguides.webp' },
-    { no:'06', name:'SOUTH PAW',      c:'#3d8bff', img:'assets/brand/dorc_blue.png',   blocker:'The deal has a scenario you haven’t practiced.',
-      threat:'An unfamiliar curveball shows up live, on a scenario you never rehearsed.', tool:'Mindtickle Real Deal Role Plays', gif:'assets/brand/tool_realdeals.webp' }
+    { no:'01', name:'BLUE',   c:'#3d8bff', img:'assets/brand/dorc_blue.png',   status:'Base roster \u2014 on the board from your first shot.',
+      notes:'The most common face on the board. Three or more of them in a cluster start looking nervous the moment you line one up.', weak: WEAK },
+    { no:'02', name:'GREEN',  c:'#3ddc84', img:'assets/brand/dorc_green.png',  status:'Base roster \u2014 on the board from your first shot.',
+      notes:'Goofy by default. Knock a few down and the Brain Blast meter in your HUD starts to fill; a full meter opens three glossary terms, and a clean sweep wipes the bottom rows.', weak: WEAK },
+    { no:'03', name:'RED',    c:'#e0412f', img:'assets/brand/dorc_red.png',    status:'Base roster \u2014 on the board from your first shot.',
+      notes:'Every wrong Brain Freeze answer adds a fresh row of these to the stack. Get it right and the whole board freezes long enough to clear a lane.', weak: WEAK },
+    { no:'04', name:'YELLOW', c:'#ffd23d', img:'assets/brand/dorc_yellow.png', status:'Base roster \u2014 on the board from your first shot.',
+      notes:'Low to the ground and slow to leave. When the lowest D.O.R.C. crosses the hazard line you are in the zone, and the run is one row from over.', weak: WEAK },
+    { no:'05', name:'ORANGE', c:'#ff8a3d', img:'assets/brand/dorc_orange.png', status:'Unlocks mid-run \u2014 at the Demofest high score + 1,000.',
+      notes:'Only players beating the room by a thousand ever meet one. Bank three methodology coins for Madness Orbs: colourless bombs that vaporise every D.O.R.C. they touch and chain through its colour.', weak: WEAK },
+    { no:'06', name:'PINK',   c:'#ff2d9b', img:'assets/brand/dorc_pink.png',   status:'Unlocks mid-run \u2014 at the Demofest high score + 2,000.',
+      notes:'The last colour to join the board and the rarest sighting at the table. If you see one, you are two thousand points past the best run of the night.', weak: WEAK }
   ];
 
   const $ = id => document.getElementById(id);
@@ -213,10 +248,9 @@
     $('caseStamp').textContent = 'CASE #' + c.no;
     $('caseNo').textContent = 'Case file #' + c.no;
     $('caseName').textContent = c.name; $('caseName').style.setProperty('--c', c.c);
-    $('caseBlocker').textContent = c.blocker;
-    $('caseThreat').textContent = c.threat;
-    $('caseTool').textContent = c.tool;
-    const g = $('caseGif'); g.src = c.gif; g.alt = c.tool;
+    $('caseStatus').textContent = c.status;
+    $('caseNotes').textContent = c.notes;
+    $('caseWeak').textContent = c.weak;
   }
   function hold(){ holdUntil = Date.now() + CASE_HOLD_MS; }
   function tick(){
@@ -225,7 +259,10 @@
   }
   showCase(0); rotTimer = setTimeout(tick, CASE_ROTATE_MS);
 
-  Kiosk.start({ idleMs: IDLE_MS, promptMs: PROMPT_MS });
+  const kioskOpts = { idleMs: IDLE_MS, promptMs: PROMPT_MS };
+  Kiosk.start(kioskOpts);
+  window.addEventListener('blur', () => { setTimeout(() => { const a = document.activeElement; if (a && a.tagName === 'IFRAME' && a.closest('.film')) Kiosk.stop(); }, 0); });
+  window.addEventListener('focus', () => { Kiosk.start(kioskOpts); });
   </script>
 </body>
 </html>
