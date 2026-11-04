@@ -15,7 +15,7 @@
   .gate { position: relative; width: 100%; max-width: 520px; margin: 24px 0; padding: 26px 26px 24px; text-align: center; }
   .gate .scan { position: absolute; inset: 0; pointer-events: none;
     background: repeating-linear-gradient(0deg, transparent, transparent 2px, rgba(0,0,0,.10) 2px, rgba(0,0,0,.10) 4px); }
-  .gate > * { position: relative; }
+  .gate > :not(.corner) { position: relative; }   /* the corners keep their absolute placement */
   .gate .logo { height: 88px; filter: drop-shadow(0 0 16px rgba(16,207,201,.5)); }
   .gate h1 { font-family: 'VT323', monospace; font-size: clamp(34px, 9vw, 46px); line-height: .95; letter-spacing: .05em; color: #fff; margin: 8px 0 6px; text-shadow: 0 0 18px rgba(16,207,201,.35); }
   .gate .sub { font-family: 'Share Tech Mono', monospace; font-size: .6rem; letter-spacing: .28em; color: var(--cyan); text-transform: uppercase; margin-bottom: 16px; }
