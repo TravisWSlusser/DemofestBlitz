@@ -305,7 +305,9 @@
         autoplay-with-sound are both allowed; leaving full screen (Esc, the button) closes the player.
         The kiosk idle timer pauses while a film is up, since clicks inside YouTube are invisible to it. ---- */
   const kioskOpts = { idleMs: IDLE_MS, promptMs: PROMPT_MS };
-  Kiosk.start(kioskOpts);
+  // someone who came in through the QR code is on their own phone, not the booth: no idle watchdog for them
+  const REMOTE = (() => { try { return localStorage.getItem('demofest.visitor') === '1'; } catch (_) { return false; } })();
+  if (!REMOTE) Kiosk.start(kioskOpts);
   const player = $('player');
   function openFilm(id){
     Kiosk.stop();
@@ -321,7 +323,7 @@
     if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
     player.classList.remove('on');
     player.querySelectorAll('iframe').forEach(f => f.remove());   // stops the audio
-    Kiosk.start(kioskOpts);
+    if (!REMOTE) Kiosk.start(kioskOpts);
   }
   document.querySelectorAll('.film .screen').forEach(s => s.addEventListener('click', () => openFilm(s.dataset.yt)));
   player.querySelector('.close').addEventListener('click', closeFilm);

@@ -151,6 +151,8 @@
   const PROMPT_MS = 10000;   // …and this long to answer before returning home
   const BURST_GAP = [8000, 15000];   // map rotation: one past run every 8–15s
   const API = '/api/blitz/';
+  // someone who came in through the QR code is on their own phone, not the booth: no idle watchdog for them
+  const REMOTE = (() => { try { return localStorage.getItem('demofest.visitor') === '1'; } catch (_) { return false; } })();
 
   /* ---- state ---- */
   let player = null;          // { id, name, trigram, token, place, lat, lon, high, games }
@@ -223,7 +225,7 @@
     loadGame();
     if (ticker) ticker.refresh(); else ticker = Ticker.mount($('ticker'));
     startRotation();
-    Kiosk.start({ idleMs: IDLE_MS, promptMs: PROMPT_MS, onTimeout: goHome });
+    if (!REMOTE) Kiosk.start({ idleMs: IDLE_MS, promptMs: PROMPT_MS, onTimeout: goHome });
   }
   /* ---- map rotation: replay recent runs while nobody is scoring ---- */
   function startRotation(){

@@ -233,6 +233,24 @@ async function exportCsv(req, res) {
   return res.status(200).send(lines.join('\r\n'));
 }
 
+/* POST visit { step } — one row per QR-code arrival (scan / return / linkedin). No personal data,
+   just a count of how many people took the code home. GET visits?key=ADMIN_KEY returns the tally. */
+async function visit(req, res) {
+  if (req.method !== "POST") return res.status(405).json({ error: "POST only" });
+  await sql`CREATE TABLE IF NOT EXISTS demofest_visits (id serial PRIMARY KEY, step text NOT NULL, ua text, created_at timestamptz NOT NULL DEFAULT now())`;
+  const step = String((body(req).step || "")).slice(0, 20) || "scan";
+  const ua = String(req.headers["user-agent"] || "").slice(0, 200);
+  await sql`INSERT INTO demofest_visits (step, ua) VALUES (${step}, ${ua})`;
+  return res.status(200).json({ ok: true });
+}
+async function visits(req, res) {
+  const key = process.env.ADMIN_KEY;
+  if (!key || String(req.query.key || "") !== key) return res.status(401).json({ error: "bad key" });
+  await sql`CREATE TABLE IF NOT EXISTS demofest_visits (id serial PRIMARY KEY, step text NOT NULL, ua text, created_at timestamptz NOT NULL DEFAULT now())`;
+  const rows = await sql`SELECT step, COUNT(*)::int AS n FROM demofest_visits GROUP BY step ORDER BY step`;
+  return res.status(200).json({ ok: true, counts: Object.fromEntries(rows.map(r => [r.step, r.n])) });
+}
+
 /* POST wipe?key=ADMIN_KEY — empties both booth tables. For clearing test runs
    before the doors open; the live Qlik tables are untouched. */
 async function wipe(req, res) {
@@ -241,11 +259,13 @@ async function wipe(req, res) {
   if (req.method !== "POST") return res.status(405).json({ error: "POST only" });
   await ensureTables();
   await sql`TRUNCATE demofest_scores, demofest_players RESTART IDENTITY`;
+  await sql`CREATE TABLE IF NOT EXISTS demofest_visits (id serial PRIMARY KEY, step text NOT NULL, ua text, created_at timestamptz NOT NULL DEFAULT now())`;
+  await sql`TRUNCATE demofest_visits RESTART IDENTITY`;
   return res.status(200).json({ ok: true });
 }
 
 const HANDLERS = { getQuestions, checkAnswer, getCoinQuestions, checkCoinAnswer, getTerms, checkTerm,
-  register, logScore, getScores, export: exportCsv, wipe };
+  register, logScore, getScores, export: exportCsv, wipe, visit, visits };
 
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');

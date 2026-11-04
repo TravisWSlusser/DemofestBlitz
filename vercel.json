@@ -1,6 +1,7 @@
 {
   "rewrites": [
-    { "source": "/api/blitz/:action", "destination": "/api/blitz?action=:action" }
+    { "source": "/api/blitz/:action", "destination": "/api/blitz?action=:action" },
+    { "source": "/visit", "destination": "/visit.html" }
   ],
   "headers": [
     {

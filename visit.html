@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>You found the side door · Stellar-Seller</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=VT323&family=Share+Tech+Mono&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="assets/booth.css">
+<style>
+  /* The QR landing: one panel, two steps. Step one opens Travis's LinkedIn; step two unlocks after it. */
+  body { overflow: auto; }
+  .content { padding: 0 16px; min-height: 100%; height: auto; justify-content: center; align-items: center; }
+  .gate { position: relative; width: 100%; max-width: 520px; margin: 24px 0; padding: 26px 26px 24px; text-align: center; }
+  .gate .scan { position: absolute; inset: 0; pointer-events: none;
+    background: repeating-linear-gradient(0deg, transparent, transparent 2px, rgba(0,0,0,.10) 2px, rgba(0,0,0,.10) 4px); }
+  .gate > * { position: relative; }
+  .gate .logo { height: 88px; filter: drop-shadow(0 0 16px rgba(16,207,201,.5)); }
+  .gate h1 { font-family: 'VT323', monospace; font-size: clamp(34px, 9vw, 46px); line-height: .95; letter-spacing: .05em; color: #fff; margin: 8px 0 6px; text-shadow: 0 0 18px rgba(16,207,201,.35); }
+  .gate .sub { font-family: 'Share Tech Mono', monospace; font-size: .6rem; letter-spacing: .28em; color: var(--cyan); text-transform: uppercase; margin-bottom: 16px; }
+  .gate .duo { width: 46%; max-width: 210px; margin: 2px auto 10px; display: block; filter: drop-shadow(0 12px 26px rgba(0,0,0,.6)); }
+  .gate p { font-family: 'VT323', monospace; font-size: 1.25rem; line-height: 1.2; color: var(--muted); margin: 0 auto 18px; max-width: 40ch; }
+  .gate p b { color: #fff; }
+  .step { display: grid; grid-template-columns: 34px 1fr; gap: 12px; align-items: center; text-align: left; margin-top: 12px; }
+  .step .n { width: 34px; height: 34px; border: 1px solid var(--cyan); display: flex; align-items: center; justify-content: center;
+    font-family: 'VT323', monospace; font-size: 1.4rem; color: var(--cyan); }
+  .step.done .n { background: var(--cyan); color: #06222b; }
+  .step .btn { display: block; width: 100%; text-align: center; padding: 14px 18px; font-size: .8rem; letter-spacing: .18em; }
+  .step .btn.orange { color: #fff; }
+  .step .btn.locked { background: #243247; border-color: #243247; color: #7f93ad; cursor: default; pointer-events: none; filter: none; }
+  .hint { font-family: 'Share Tech Mono', monospace; font-size: .56rem; letter-spacing: .14em; text-transform: uppercase; color: var(--dim); margin-top: 14px; line-height: 1.8; }
+  .hint b { color: var(--muted); }
+  footer { display: flex; flex-direction: column; align-items: center; gap: 12px; padding: 0 0 22px; }
+  footer .qse { height: 14px; opacity: .95; }
+  footer .label { font-size: .55rem; letter-spacing: .25em; }
+</style>
+</head>
+<body>
+  <video class="bg-video" autoplay muted loop playsinline>
+    <source src="assets/brand/RecRoom_bg_loop1.webm" type="video/webm">
+  </video>
+  <div class="bg-overlay"></div>
+  <div class="scanlines"></div>
+
+  <div class="content">
+    <section class="gate frame">
+      <div class="corner tl"></div><div class="corner tr"></div><div class="corner bl"></div><div class="corner br"></div>
+      <div class="scan"></div>
+      <video class="logo" autoplay muted loop playsinline poster="assets/brand/RecRoom_Logo1.png" aria-label="REC ROOM"><source src="assets/brand/REC_Room_logo_360.webm" type="video/webm"></video>
+      <h1>YOU FOUND THE SIDE DOOR</h1>
+      <div class="sub">DevLearn Demofest &middot; Stellar-Seller</div>
+      <img class="duo" src="assets/brand/stellar_and_sideqlik.png" alt="Stellar-Seller and Side-Qlik">
+      <p>Thanks for stopping by the booth. Everything you saw &mdash; the films, the D.O.R.C.S. case files, the arcade &mdash; is in here. <b>One thing first:</b> add Travis on LinkedIn so the adventure keeps going after the show.</p>
+
+      <div class="step" id="step1">
+        <div class="n">1</div>
+        <a class="btn orange" id="li" href="https://www.linkedin.com/in/travis-slusser/" target="_blank" rel="noopener">Connect with Travis on LinkedIn &rarr;</a>
+      </div>
+      <div class="step" id="step2">
+        <div class="n">2</div>
+        <a class="btn locked" id="enter" href="index.html" aria-disabled="true">Enter the universe &rarr;</a>
+      </div>
+      <div class="hint" id="hint">Tap step 1, send the connection request, then come back here for step 2.</div>
+    </section>
+
+    <footer>
+      <img class="qse" src="assets/brand/qse_typemark.png" alt="Qlik Sales Enablement">
+      <span class="label dim">A Travis Slusser creation</span>
+    </footer>
+  </div>
+
+  <script>
+  'use strict';
+  const API = '/api/blitz/';
+  const $ = id => document.getElementById(id);
+  const log = step => { try { fetch(API + 'visit', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ step }), keepalive: true }); } catch (_) {} };
+  const KEY = 'demofest.visitor';
+  let seen = false; try { seen = localStorage.getItem(KEY) === '1'; } catch (_) {}
+
+  function unlock(){
+    $('step1').classList.add('done');
+    $('li').innerHTML = '&#10003; LinkedIn opened &middot; tap again if you missed it';
+    const e = $('enter'); e.classList.remove('locked'); e.removeAttribute('aria-disabled');
+    $('hint').innerHTML = 'Step 2 is open. <b>Welcome back to the universe.</b>';
+  }
+  $('li').addEventListener('click', () => {
+    try { localStorage.setItem(KEY, '1'); } catch (_) {}
+    log('linkedin');
+    setTimeout(unlock, 400);   // after the new tab opens, so the change is waiting when they come back
+  });
+  $('enter').addEventListener('click', e => { if (e.currentTarget.classList.contains('locked')) e.preventDefault(); });
+
+  log(seen ? 'return' : 'scan');
+  if (seen) unlock();   // they already did step 1 on an earlier visit
+  </script>
+</body>
+</html>

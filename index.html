@@ -12,7 +12,14 @@
   /* Home: the REC Room header, then two framed doors. Everything fits one screen. */
   .content { padding: 0 32px 14px; }
   #ticker { margin-top: 12px; }
-  header { display: flex; flex-direction: column; align-items: center; padding: 10px 0 6px; gap: 6px; }
+  header { position: relative; display: flex; flex-direction: column; align-items: center; padding: 10px 0 6px; gap: 6px; }
+  /* the take-home QR: top-left, beside the centred logo */
+  .qr { position: absolute; left: 0; top: 8px; display: flex; flex-direction: column; align-items: center; gap: 7px; padding: 10px 10px 9px; width: 150px; }
+  .qr .code { width: 110px; height: 110px; background: #fff; padding: 6px; box-sizing: border-box; }
+  .qr .code img, .qr .code canvas { width: 100%; height: 100%; display: block; }
+  .qr .t1 { font-family: 'VT323', monospace; font-size: 1.35rem; line-height: 1; letter-spacing: .08em; color: #fff; }
+  .qr .t2 { font-family: 'Share Tech Mono', monospace; font-size: .5rem; letter-spacing: .12em; text-transform: uppercase; color: var(--cyan); text-align: center; line-height: 1.6; }
+  @media (max-width: 900px) { .qr { display: none; } }
   header .logo-video { height: clamp(80px, 15vh, 170px); filter: drop-shadow(0 0 28px rgba(16,207,201,.55)); }
   header .label { font-size: .8rem; }
   header .strap { display: flex; align-items: center; gap: 18px; }
@@ -75,6 +82,7 @@
   <div class="content">
     <div id="ticker"></div>
     <header>
+      <div class="qr panel"><div class="code" id="qr"></div><div class="t1">SCAN ME</div><div class="t2">to explore even<br>more later</div></div>
       <video class="logo-video" autoplay muted loop playsinline poster="assets/brand/RecRoom_Logo1.png">
         <source src="assets/brand/REC_Room_logo_360.webm" type="video/webm">
       </video>
@@ -121,7 +129,10 @@
   </div>
 
   <script src="assets/ticker.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
   <script>
+    // the take-home code points at this deployment's own /visit page
+    try { new QRCode(document.getElementById('qr'), { text: location.origin + '/visit', width: 196, height: 196, colorDark: '#06101f', colorLight: '#ffffff', correctLevel: QRCode.CorrectLevel.M }); } catch (e) {}
     Ticker.mount(document.getElementById('ticker'));
     // Home is where idle returns land: make sure no previous player lingers.
     try { sessionStorage.removeItem('demofest.player'); } catch (e) {}
