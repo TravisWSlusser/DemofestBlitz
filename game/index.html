@@ -1,0 +1,3640 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SIDE-QLIK BLITZ</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Press+Start+2P&family=Nabla&family=Rubik+Glitch&family=Rubik+Wet+Paint&family=Rubik+Puddles&family=Rubik+Maze&family=Rubik+Beastly&family=Major+Mono+Display&family=VT323&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --deep:#19426C; --green:#009845; --sky:#10CFC9; --ocean:#006580;
+    --ink:#0a1426; --panel:#0e1c33; --line:rgba(16,207,201,.18);
+  }
+  *,*::before,*::after{margin:0;padding:0;box-sizing:border-box}
+  html,body{width:100%;height:100%;background:#000;overflow:hidden;
+    font-family:'Inter',system-ui,sans-serif}
+  /* Stage keeps the game at a fixed 16:9 and scales it to fit whatever the
+     iframe gives us, so internal coordinates stay 1280x720 forever. */
+  #stage{position:absolute;inset:0;display:flex;align-items:center;justify-content:center}
+  #frame{position:relative;flex:0 0 auto;width:1280px;height:720px;transform-origin:center center;
+    background:#06101f;overflow:hidden;box-shadow:0 0 0 1px var(--line)}
+  #freezeVid{position:absolute;inset:0;width:1280px;height:720px;object-fit:fill;
+    pointer-events:none;z-index:0}                /* behind the canvas; composited via drawImage */
+  canvas{position:absolute;inset:0;width:1280px;height:720px;display:block;z-index:1}
+  #audioToggles{position:absolute;top:12px;left:12px;z-index:15;display:flex;gap:8px}
+  /* ---- touch layout -------------------------------------------------------
+     38px is a fine mouse target and a poor thumb one — the guideline minimum
+     is ~44px and these sit at the very edge of the screen. On touch they grow
+     to 52 and move to the BOTTOM-left, alongside the Brain Blast meter.
+
+     The bottom-left corner is the right home for them because the 16:9 stage
+     letterboxes on a short wide phone, so that corner is dead space rather
+     than playfield — the controls stop covering anything that matters, and
+     they are where a thumb already rests. */
+  @media (pointer:coarse){
+    /* A COLUMN down the left margin, not a row along the bottom.
+       Measured, because the first attempt collided: five 52px buttons plus
+       gaps is 300px wide, and along the bottom that runs x 12-312 straight
+       through the Brain Blast pill at x 200-540. Bottom-right is no better —
+       Methodology and the signed-in label live there.
+       The left margin is the one genuinely free strip: the board is centred
+       at BOARD_X0=192, so x 0-192 is dead pillarbox for the full height.
+       A 52px column sits in it with room to spare, clear of the board and
+       clear of the HUD at y 612, and stays under a left thumb in landscape. */
+    #audioToggles{
+      flex-direction:column;
+      top:50%; transform:translateY(-50%);
+      left:calc(env(safe-area-inset-left) + 16px);
+      bottom:auto; gap:10px;
+    }
+    /* 88, not 52. These are STAGE coordinates, and the stage is scaled to fit
+       the phone — about 0.54 on a landscape iPhone (1280x720 fitted into an
+       844x390 frame). So the old 52px rendered at 28 REAL pixels, which is why
+       it felt tiny however big the number looked in the CSS. 88 lands at ~48
+       real pixels, past the 44px touch guideline.
+
+       88 with a 10px gap is also the largest that still fits: five buttons is
+       480px tall, y 120-600, which clears the HUD at y 612. 96px would be 536
+       and would run into it. */
+    #audioToggles button{width:88px;height:88px;border-radius:18px;border-width:2px}
+    #audioToggles button svg{width:42px;height:42px}
+  }
+  /* Pause and Exit are touch-only. Desktop already has Esc/P for pause and
+     the REC Room page around it to leave; on a phone there was neither, and
+     the room's floating X sat directly on top of this row. */
+  #pauseBtn,#exitBtn{display:none}
+  @media (pointer:coarse){ #pauseBtn,#exitBtn{display:flex} }
+  #audioToggles button{width:38px;height:38px;display:flex;align-items:center;justify-content:center;
+    cursor:pointer;background:rgba(10,20,38,.7);border:1px solid rgba(124,92,255,.4);border-radius:9px;
+    padding:0;transition:border-color .15s,box-shadow .15s,background .15s}
+  #audioToggles button:hover{border-color:#10CFC9;box-shadow:0 0 12px rgba(16,207,201,.35);background:rgba(16,30,52,.85)}
+
+  /* ---- Start screen ---- */
+  #start{position:absolute;inset:0;z-index:20;display:flex;flex-direction:column;
+    align-items:center;justify-content:flex-end;padding-bottom:74px}
+  #loading{position:absolute;inset:0;z-index:30;display:flex;flex-direction:column;
+    align-items:center;justify-content:center;gap:24px;background:#06101f;transition:opacity .35s}
+  #loading .ltitle{font-family:'Press Start 2P',monospace;font-size:24px;letter-spacing:2px;
+    background:linear-gradient(90deg,#10CFC9,#7C5CFF);-webkit-background-clip:text;background-clip:text;color:transparent}
+  #loading .lbarwrap{width:58%;max-width:520px;height:16px;background:#0e1c33;
+    border:1px solid rgba(255,255,255,.1);border-radius:9px;overflow:hidden}
+  #loading .lbar{height:100%;width:0%;background:linear-gradient(90deg,#10CFC9,#7C5CFF);transition:width .2s ease}
+  #loading .lpct{font-family:'Press Start 2P',monospace;font-size:11px;color:#9ad7ff;letter-spacing:1px}
+  #start video{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;z-index:-2}
+  #start .scrim{position:absolute;inset:0;z-index:-1;
+    background:linear-gradient(180deg,rgba(6,16,31,0) 45%,rgba(6,16,31,.85) 100%)}
+  .btn{font-family:'Press Start 2P',monospace;font-size:15px;letter-spacing:1px;
+    color:#06101f;background:var(--sky);border:none;border-radius:8px;padding:18px 34px;
+    cursor:pointer;box-shadow:0 0 24px rgba(16,207,201,.55);transition:transform .12s,filter .12s}
+  .btn:hover{transform:translateY(-2px);filter:brightness(1.08)}
+  .btn:disabled{background:#2b3d57;color:#7d93b3;box-shadow:none;cursor:default;transform:none}
+  #startSub{font-family:'Press Start 2P',monospace;font-size:8px;letter-spacing:2px;
+    color:var(--sky);margin-top:18px;text-transform:uppercase;opacity:.85}
+  .ident{position:absolute;bottom:20px;right:22px;font-family:'Press Start 2P',monospace;
+    font-size:8px;color:#9fb4d0;letter-spacing:1px;z-index:21;text-align:right}
+  .ident b{color:var(--sky)}
+
+  /* ---- HOW TO PLAY button (ghost variant under PRESS START) ---- */
+  .btn-ghost{background:transparent;color:var(--sky);border:1px solid rgba(16,207,201,.5);
+    box-shadow:none;font-size:11px;padding:12px 22px;margin-top:14px}
+  .btn-ghost:hover{background:rgba(16,207,201,.12);filter:none;transform:translateY(-1px)}
+
+  /* ---- Arcade high scores ---- */
+  #scores{position:absolute;inset:0;z-index:24;display:none;align-items:center;justify-content:center;
+    background:rgba(6,16,31,.9);backdrop-filter:blur(4px)}
+  #scores.show{display:flex}
+  #scores .sc-card{width:560px;max-width:94%;height:560px;max-height:90%;display:flex;flex-direction:column;
+    background:linear-gradient(180deg,rgba(14,28,51,.97),rgba(10,20,38,.97));
+    border:1px solid rgba(124,92,255,.55);border-radius:16px;box-shadow:0 0 50px rgba(124,92,255,.35);overflow:hidden}
+  #scores .sc-head{display:flex;align-items:center;justify-content:space-between;padding:20px 24px 14px}
+  #scores .sc-title{font-family:'Press Start 2P',monospace;font-size:16px;color:#fff;letter-spacing:2px;
+    text-shadow:2px 0 #FF2D9B,-2px 0 #10CFC9,0 0 16px rgba(124,92,255,.6)}
+  #scores .sc-close{background:none;border:none;color:#9fb4d0;font-size:28px;line-height:1;cursor:pointer;padding:0 4px}
+  #scores .sc-close:hover{color:#FF2D9B}
+  #scores .sc-tabs{display:flex;gap:6px;padding:0 20px 12px}
+  #scores .sc-tab{flex:1;font-family:'Press Start 2P',monospace;font-size:9px;letter-spacing:1px;
+    background:rgba(255,255,255,.03);border:1px solid rgba(124,92,255,.2);color:#7d93b3;
+    padding:10px 4px;cursor:pointer;border-radius:7px}
+  #scores .sc-tab:hover{color:#cfe6ff}
+  #scores .sc-tab.active{color:#10CFC9;border-color:#10CFC9;background:rgba(16,207,201,.08)}
+  /* the player's own territory tab gets a distinct purple flag */
+  #scores .sc-tab.home{border-color:rgba(124,92,255,.6)}
+  #scores .sc-tab.home::after{content:' \25C6';color:#7C5CFF;font-size:7px}
+  #scores .sc-tab.home.active{color:#7C5CFF;border-color:#7C5CFF;background:rgba(124,92,255,.12)}
+  #scores .sc-colhead{display:flex;align-items:center;padding:8px 28px;
+    font-family:'Inter',sans-serif;font-weight:700;font-size:10px;letter-spacing:1px;color:#5f7799;
+    border-bottom:1px solid rgba(124,92,255,.18)}
+  #scores .sc-list{flex:1 1 auto;overflow-y:auto;padding:6px 16px 16px}
+  #scores .sc-rank{width:42px}
+  #scores .sc-tri{flex:1}
+  #scores .sc-flag{width:34px;display:flex;justify-content:center}
+  #scores .sc-row .sc-flag img{width:24px;height:16px;object-fit:cover;border:1px solid rgba(255,255,255,.15);border-radius:2px}
+  #scores .sc-hi{width:96px;text-align:right}
+  #scores .sc-time{width:96px;text-align:right}
+  #scores .sc-row{display:flex;align-items:center;padding:11px 12px;margin:4px 0;border-radius:8px;
+    font-family:'Inter',sans-serif;font-size:15px;color:#cfe6ff;background:rgba(255,255,255,.02);
+    border:1px solid transparent}
+  #scores .sc-row .sc-rank{font-family:'Press Start 2P',monospace;font-size:11px;color:#7d93b3}
+  #scores .sc-row .sc-tri{font-family:'Press Start 2P',monospace;font-size:12px;color:#dfe9f6;letter-spacing:1px}
+  #scores .sc-row .sc-hi{font-family:'Press Start 2P',monospace;font-size:12px;color:#fff}
+  #scores .sc-row .sc-time{color:#9fb4d0;font-size:13px}
+  /* the player's own row glows */
+  #scores .sc-row.me{background:rgba(124,92,255,.16);border-color:rgba(124,92,255,.7);
+    box-shadow:0 0 18px rgba(124,92,255,.35)}
+  #scores .sc-row.me .sc-tri{color:#b9a6ff}
+  #scores .sc-empty{font-family:'Inter',sans-serif;font-size:14px;color:#7d93b3;text-align:center;padding:40px 20px}
+
+  /* ---- Tutorial overlay (splash) ---- */
+  #tutorial{position:absolute;inset:0;z-index:26;display:none;align-items:center;justify-content:center;
+    background:rgba(6,13,24,.9);backdrop-filter:blur(4px)}
+  #tutorial.show{display:flex}
+  #tutorial .tut-card{width:760px;max-width:94%;height:560px;display:flex;flex-direction:column;
+    background:var(--panel,#0e1c33);border:1px solid rgba(124,92,255,.5);border-radius:14px;
+    box-shadow:0 0 50px rgba(124,92,255,.3);overflow:hidden}
+  #tutorial .tut-head{display:flex;align-items:center;justify-content:space-between;
+    padding:18px 24px 12px}
+  #tutorial .tut-title{font-family:'Press Start 2P',monospace;font-size:15px;letter-spacing:2px;color:#fff;
+    text-shadow:2px 0 #FF2D9B,-2px 0 #10CFC9,0 0 16px rgba(124,92,255,.6)}
+  #tutorial .tut-close{background:none;border:none;color:#9fb4d0;font-size:28px;line-height:1;cursor:pointer;padding:0 4px}
+  #tutorial .tut-close:hover{color:#FF2D9B}
+  #tutorial .tut-pages{flex:1 1 auto;position:relative;padding:24px 30px;overflow:hidden}
+  #tutorial #tutDemo{position:relative;inset:auto;display:block;width:240px;height:140px;
+    margin:0 auto 18px;border:1px solid rgba(124,92,255,.3);border-radius:10px;background:#081120;z-index:auto}
+  #tutorial .tut-page{display:none}
+  #tutorial .tut-page.active{display:block}
+  #tutorial .tut-sub{font-family:'Press Start 2P',monospace;font-size:12px;letter-spacing:2px;color:#10CFC9;
+    margin:0 0 18px;text-shadow:0 0 12px rgba(16,207,201,.4)}
+  #tutorial .tut-nav{display:flex;align-items:center;justify-content:space-between;
+    padding:14px 24px;border-top:1px solid rgba(124,92,255,.2)}
+  #tutorial .tut-arrow{font-family:'Press Start 2P',monospace;font-size:22px;line-height:1;
+    background:transparent;border:1px solid rgba(16,207,201,.4);color:#10CFC9;border-radius:8px;
+    width:48px;height:40px;cursor:pointer;display:flex;align-items:center;justify-content:center}
+  #tutorial .tut-arrow:hover{background:rgba(16,207,201,.12)}
+  #tutorial .tut-arrow:disabled{opacity:.25;cursor:default}
+  #tutorial .tut-dots{display:flex;gap:9px}
+  #tutorial .tut-dots span{width:9px;height:9px;border-radius:50%;background:#2a3c5a;transition:background .2s}
+  #tutorial .tut-dots span.on{background:#10CFC9;box-shadow:0 0 8px rgba(16,207,201,.6)}
+
+  #tutorial .tut-text p{font-family:'Inter',sans-serif;font-size:17px;color:#cfe6ff;
+    line-height:1.35;margin:0 0 12px}
+  #tutorial .tut-text b{color:#fff}
+  #tutorial .tut-unlock-head{font-family:'Press Start 2P',monospace;font-size:11px;letter-spacing:1px;
+    color:#FFC846;margin:18px 0 10px}
+  #tutorial .tut-unlock-row{display:flex;gap:14px;margin:6px 0 12px}
+  #tutorial .tut-unlock{font-family:'Press Start 2P',monospace;font-size:9px;letter-spacing:1px;color:#cfe6ff;
+    text-align:center;line-height:1.8;flex:1;background:#0a1628;border:1px solid rgba(124,92,255,.25);
+    border-radius:8px;padding:12px 6px}
+  #tutorial .tut-unlock .swatch{display:inline-block;width:26px;height:26px;border-radius:50%;
+    border:2px solid rgba(255,255,255,.25);margin-bottom:8px}
+  #tutorial .tut-unlock .thr{color:#10CFC9}
+  #tutorial .tut-small{font-family:'Inter',sans-serif;font-size:14px;color:#7d93b3}
+  #tutorial .tut-grid{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+  #tutorial .tut-pow{display:flex;flex-direction:column;align-items:center;text-align:center;
+    background:#0a1628;border:1px solid rgba(124,92,255,.25);border-radius:10px;padding:16px 14px}
+  #tutorial .pow-ico{position:relative;inset:auto;margin:0 auto 10px;display:block;z-index:auto}
+  #tutorial #powFreeze,#tutorial #powCoin,#tutorial #powMadness{width:96px;height:96px}
+  #tutorial #powBlast{width:200px;height:64px}
+  #tutorial .pow-name{font-family:'Press Start 2P',monospace;font-size:10px;letter-spacing:1px;
+    color:#10CFC9;margin-bottom:8px}
+  #tutorial .pow-desc{font-family:'Inter',sans-serif;font-size:15px;color:#cfe6ff;line-height:1.3}
+  #tutorial .pow-desc b{color:#fff}
+
+  /* ---- Game over ---- */
+  #over{position:absolute;inset:0;z-index:22;display:none;align-items:center;justify-content:center;
+    background:rgba(6,16,31,.86);backdrop-filter:blur(4px)}
+  #over #overFx{position:absolute;inset:auto;left:0;top:0;width:100%;height:100%;z-index:0;pointer-events:none}
+  #over .over-card{position:relative;z-index:1;width:460px;max-width:92%;
+    background:linear-gradient(180deg,rgba(14,28,51,.96),rgba(10,20,38,.96));
+    border:1px solid rgba(124,92,255,.55);border-radius:16px;box-shadow:0 0 50px rgba(124,92,255,.35);
+    padding:26px 30px 22px;text-align:center;animation:overIn .5s cubic-bezier(.2,.9,.25,1.2)}
+  @keyframes overIn{0%{transform:translateY(24px) scale(.94);opacity:0}100%{transform:none;opacity:1}}
+  #over .over-title{font-family:'Press Start 2P',monospace;font-size:26px;color:#fff;letter-spacing:2px;
+    text-shadow:2px 0 #FF2D9B,-2px 0 #10CFC9,0 0 22px rgba(255,45,155,.6);animation:overGlitch .25s steps(2) infinite}
+  @keyframes overGlitch{0%{text-shadow:2px 0 #FF2D9B,-2px 0 #10CFC9,0 0 22px rgba(255,45,155,.6)}
+    50%{text-shadow:-3px 1px #FF2D9B,3px -1px #10CFC9,0 0 26px rgba(16,207,201,.7)}
+    100%{text-shadow:2px 0 #FF2D9B,-2px 0 #10CFC9,0 0 22px rgba(255,45,155,.6)}}
+  #over .over-high{font-family:'Press Start 2P',monospace;font-size:11px;letter-spacing:1px;color:#FFC846;
+    margin-top:10px;text-shadow:0 0 14px rgba(255,200,70,.8);display:none;animation:highPulse .6s ease-in-out infinite}
+  #over .over-high.show{display:block}
+  @keyframes highPulse{0%,100%{opacity:.7;transform:scale(1)}50%{opacity:1;transform:scale(1.05)}}
+  #over .over-scorelabel{font-family:'Inter',sans-serif;font-weight:600;font-size:11px;letter-spacing:2px;
+    color:#9fb4d0;margin-top:18px}
+  #over .over-score{font-family:'Press Start 2P',monospace;font-size:34px;color:#fff;margin:6px 0 16px;
+    text-shadow:0 0 20px rgba(16,207,201,.5)}
+  #over .over-row{display:flex;justify-content:space-between;align-items:center;
+    font-family:'Inter',sans-serif;font-size:14px;color:#cfe6ff;padding:5px 4px}
+  #over .over-row span{color:#9fb4d0;font-weight:600;letter-spacing:.5px}
+  #over .over-row b{font-family:'Press Start 2P',monospace;font-size:13px;color:#7C5CFF}
+  #over .over-divider{height:1px;background:linear-gradient(90deg,transparent,rgba(124,92,255,.5),transparent);margin:14px 0}
+  #over .over-stathead{font-family:'Press Start 2P',monospace;font-size:10px;letter-spacing:2px;color:#10CFC9;margin-bottom:12px}
+  #over .over-stat{display:flex;align-items:center;gap:10px;font-family:'Inter',sans-serif;font-size:14px;
+    color:#dfe9f6;padding:6px 4px}
+  #over .over-stat .ic{width:22px;text-align:center;font-size:15px}
+  #over .over-stat .ic-fz{color:#9ad7ff}
+  #over .over-stat .ic-cn{color:#FFC846}
+  #over .over-stat .ic-bb{color:#7C5CFF}
+  #over .over-stat .nm{flex:1;text-align:left;color:#9fb4d0;font-weight:600;letter-spacing:.5px}
+  #over .over-stat b{font-family:'Press Start 2P',monospace;font-size:12px;color:#fff}
+  #over .over-btns{display:flex;gap:12px;margin-top:22px}
+  #over .over-btns .btn{flex:1;margin:0}
+  #over .btn-ghost2{background:transparent;color:#10CFC9;border:1px solid rgba(16,207,201,.5);box-shadow:none}
+  #over .btn-ghost2:hover{background:rgba(16,207,201,.12)}
+
+  /* ---- Pause menu ---- */
+  #pause{position:absolute;inset:0;z-index:24;display:none;flex-direction:column;
+    align-items:center;justify-content:center;background:rgba(6,16,31,.88);backdrop-filter:blur(4px)}
+  #pause h2{font-family:'Press Start 2P',monospace;font-size:22px;color:var(--sky);letter-spacing:2px;margin-bottom:34px}
+  #pause .row{display:flex;align-items:center;gap:18px;margin:14px 0;width:420px}
+  #pause .row label{font-family:'Press Start 2P',monospace;font-size:10px;color:#cfe6ff;width:120px;text-align:right}
+  #pause input[type=range]{flex:1;accent-color:var(--sky);height:6px}
+  #pause .val{font-family:'Press Start 2P',monospace;font-size:9px;color:#7d93b3;width:34px}
+  #pause .btn{margin-top:30px}
+
+  /* ---- Quiz modal ---- */
+  #quiz{position:absolute;inset:0;z-index:26;display:none;flex-direction:column;
+    align-items:center;justify-content:center;background:rgba(6,16,31,.9);backdrop-filter:blur(5px);padding:40px}
+  #quiz .card{width:760px;max-width:92%;background:var(--panel);border:1px solid rgba(16,207,201,.3);
+    border-radius:12px;padding:30px 34px;box-shadow:0 0 40px rgba(16,207,201,.18)}
+  #quiz .tag{font-family:'Press Start 2P',monospace;font-size:9px;letter-spacing:2px;color:var(--green);margin-bottom:14px}
+  #quiz .qprompt{font-family:'Inter',sans-serif;font-weight:700;font-size:26px;color:#fff;line-height:1.2;margin-bottom:22px}
+  #quiz .qopts{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+  #quiz .opt{min-width:0;font-family:'Inter',sans-serif;font-weight:600;font-size:18px;color:#dceaff;
+    background:#13243f;border:1px solid rgba(255,255,255,.1);border-radius:8px;padding:14px 16px;cursor:pointer;
+    text-align:left;transition:background .12s,border-color .12s}
+  @media (hover:hover){ #quiz .opt:hover{background:#1a3050;border-color:var(--sky)} }
+  #quiz .opt b{color:var(--sky);margin-right:8px}
+  #quiz .opt.correct{background:rgba(0,152,69,.3);border-color:var(--green)}
+  #quiz .opt.wrong{background:rgba(184,49,49,.3);border-color:#B83131}
+  #quiz .qresult{font-family:'Press Start 2P',monospace;font-size:12px;margin-top:18px;text-align:center;min-height:16px}
+
+  /* ---- Coin (Coach Kent) modal ---- */
+  #coin{position:absolute;inset:0;z-index:27;display:none;flex-direction:column;
+    align-items:center;justify-content:center;background:rgba(6,16,31,.9);backdrop-filter:blur(5px);padding:40px}
+  #coin .card{width:760px;max-width:92%;min-height:560px;height:auto;max-height:calc(100% - 16px);background:var(--panel);border:1px solid rgba(124,92,255,.5);
+    border-radius:12px;padding:26px 34px 30px;box-shadow:0 0 44px rgba(124,92,255,.28);
+    display:flex;flex-direction:column;overflow:hidden;position:relative}
+  #coin .tag{font-family:'Press Start 2P',monospace;font-size:9px;letter-spacing:2px;color:#fff;margin-bottom:6px;
+    text-shadow:1px 0 #FF2D9B,-1px 0 #10CFC9,0 0 12px rgba(124,92,255,.6)}
+  #coin .timerwrap{display:flex;align-items:center;gap:14px;margin:10px 0 18px}
+  #coin .timer{flex:1;height:12px;background:#0a1424;border:1px solid rgba(16,207,201,.25);border-radius:7px;overflow:hidden}
+  #coin .timer .bar{height:100%;width:100%;background:linear-gradient(90deg,#10CFC9,#7C5CFF 55%,#FF2D9B)}
+  #coin .secs{font-family:'Press Start 2P',monospace;font-size:13px;color:#10CFC9;width:54px;text-align:right;text-shadow:0 0 10px rgba(16,207,201,.6)}
+  #coin .qprompt{font-family:'Inter',sans-serif;font-weight:700;color:#fff;line-height:1.2;
+    display:flex;align-items:center;justify-content:center;text-align:center;
+    transition:height .6s cubic-bezier(.22,1,.36,1);
+    flex:0 0 auto;height:200px;font-size:46px;overflow:hidden}
+  #coin .qprompt.settled{height:96px}
+  #coin .qprompt{position:relative}
+  #coin .qprompt .pone{position:absolute;inset:0;padding:0 10px;font-size:26px;
+    display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;
+    will-change:transform;transition:transform .6s cubic-bezier(.22,1,.36,1)}
+  #coin .qctx{display:block;font-weight:500;color:#cfe6ff}
+  #coin .qask{display:block;font-weight:800;font-size:.85em;color:#10CFC9;margin-top:.4em;
+    text-shadow:0 0 12px rgba(16,207,201,.35)}
+  #coin .qprompt,#quiz .qprompt{text-wrap:balance}   /* no orphan words on the last line */
+  /* divider wipes out under the settled prompt */
+  #coin .qdivider{height:2px;width:0;align-self:center;margin:6px 0 16px;
+    background:linear-gradient(90deg,#10CFC9,#7C5CFF,#FF2D9B);
+    transition:width .5s ease;box-shadow:0 0 10px rgba(16,207,201,.5)}
+  #coin .qdivider.show{width:100%}
+  /* shared bottom zone: countdown and answers occupy the SAME fixed space */
+  #coin .qzone{position:relative;flex:1 1 auto;min-height:200px}
+  #coin .card.verdict .timerwrap{margin:6px 0 10px}
+  #coin .card.verdict .qzone{min-height:0;flex:0 0 auto}
+  #coin .card.verdict .qopts{position:static}
+  #coin .card.verdict .cresult{margin-top:10px}
+  #coin .qzone .countdown,#coin .qzone .qopts{position:absolute;inset:0;
+    transition:opacity .35s ease;opacity:0;pointer-events:none}
+  #coin .qzone .countdown.show{opacity:1}
+  #coin .qzone .qopts.show{opacity:1;pointer-events:auto}
+  #coin .qopts{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:12px;align-content:center}
+  #coin .opt{min-width:0;font-family:'Inter',sans-serif;font-weight:600;font-size:18px;color:#dceaff;
+    background:#0c1c34;border:1px solid rgba(124,92,255,.25);border-radius:8px;padding:14px 16px;cursor:pointer;text-align:left;transition:background .12s,border-color .12s,box-shadow .12s}
+  @media (hover:hover){ #coin .opt:hover{background:#13294a;border-color:#10CFC9;box-shadow:0 0 14px rgba(16,207,201,.3)} }
+  #coin .opt b{color:#10CFC9;margin-right:8px}
+  #coin .opt.correct{background:rgba(16,207,201,.22);border-color:#10CFC9;box-shadow:0 0 16px rgba(16,207,201,.4)}
+  #coin .opt.wrong{background:rgba(255,45,155,.2);border-color:#FF2D9B}
+  #coin .cresult{font-family:'Press Start 2P',monospace;font-size:14px;margin-top:18px;text-align:center;min-height:18px}
+  #coin .cwhy{font-family:'Inter',sans-serif;font-size:16px;color:#cfe6ff;text-align:center;margin-top:12px;line-height:1.3;min-height:0}
+  #coin .coinContinue{display:none;margin:14px auto 0;font-family:'Press Start 2P',monospace;font-size:11px;
+    color:#041018;background:#10CFC9;border:none;border-radius:8px;padding:12px 26px;cursor:pointer;
+    box-shadow:0 0 16px rgba(16,207,201,.45);letter-spacing:1px}
+  #coin .coinContinue:hover{background:#7C5CFF;color:#fff;box-shadow:0 0 16px rgba(124,92,255,.5)}
+  /* Methodology category reel — neon-noir vertical wheel */
+  #coin .reel-window{position:relative;height:132px;flex:0 0 132px;margin:6px 0 14px;overflow:hidden;
+    border:1px solid rgba(124,92,255,.5);border-radius:10px;
+    background:
+      repeating-linear-gradient(0deg, rgba(124,92,255,.05) 0 1px, transparent 1px 3px),
+      linear-gradient(180deg,#0b1430,#0a1020);
+    box-shadow:inset 0 0 26px rgba(0,0,0,.6), 0 0 18px rgba(124,92,255,.18)}
+  #coin .reel-strip{position:absolute;left:0;right:0;top:0;will-change:transform}
+  #coin .reel-cell{height:44px;display:flex;align-items:center;justify-content:center;
+    font-family:'Press Start 2P',monospace;font-size:14px;letter-spacing:1px;color:#9aa7c8;
+    text-shadow:0 0 10px rgba(124,92,255,.25)}
+  /* categories pulled into the neon-noir palette */
+  #coin .reel-cell.c-term{color:#10CFC9;text-shadow:0 0 12px rgba(16,207,201,.55)}
+  #coin .reel-cell.c-green_sheet{color:#7C5CFF;text-shadow:0 0 12px rgba(124,92,255,.55)}
+  #coin .reel-cell.c-blue_sheet{color:#4FA8FF;text-shadow:0 0 12px rgba(79,168,255,.55)}
+  /* center winner window — cyan/purple band */
+  #coin .reel-window::before{content:'';position:absolute;left:0;right:0;top:44px;height:44px;z-index:2;
+    pointer-events:none;border-top:2px solid rgba(16,207,201,.6);border-bottom:2px solid rgba(124,92,255,.6);
+    background:linear-gradient(180deg,rgba(16,207,201,.07),rgba(124,92,255,.13),rgba(16,207,201,.07))}
+  #coin .reel-pointer{position:absolute;top:56px;z-index:4;width:0;height:0;pointer-events:none}
+  #coin .reel-pointer-l{left:0;border-top:10px solid transparent;border-bottom:10px solid transparent;border-left:14px solid #10CFC9;
+    filter:drop-shadow(0 0 6px rgba(16,207,201,.8))}
+  #coin .reel-pointer-r{right:0;border-top:10px solid transparent;border-bottom:10px solid transparent;border-right:14px solid #FF2D9B;
+    filter:drop-shadow(0 0 6px rgba(255,45,155,.8))}
+  #coin .reel-fade{position:absolute;left:0;right:0;height:34px;z-index:3;pointer-events:none}
+  #coin .reel-fade-top{top:0;background:linear-gradient(180deg,#0a1020,transparent)}
+  #coin .reel-fade-bot{bottom:0;background:linear-gradient(0deg,#0a1020,transparent)}
+  /* landed: chromatic-split glow pulse on the winner band */
+  #coin .reel-window.landed::before{
+    border-top-color:#10CFC9;border-bottom-color:#FF2D9B;
+    background:linear-gradient(180deg,rgba(16,207,201,.16),rgba(124,92,255,.24),rgba(255,45,155,.16));
+    box-shadow:0 0 26px rgba(124,92,255,.55), inset 0 0 18px rgba(16,207,201,.25);
+    animation:reelLand .25s steps(2) 2}
+  @keyframes reelLand{0%{transform:translateX(-2px)}50%{transform:translateX(2px)}100%{transform:translateX(0)}}
+  #coin .reel-window.landed .reel-cell{animation:reelCellGlitch .2s steps(2) 2}
+  @keyframes reelCellGlitch{0%{text-shadow:2px 0 #FF2D9B,-2px 0 #10CFC9}100%{text-shadow:0 0 12px rgba(124,92,255,.6)}}
+  /* big 3-2-1 countdown overlay (read phase -> answers) */
+  #coin .countdown{display:flex;align-items:center;justify-content:center;
+    font-family:'Press Start 2P',monospace;font-size:120px;color:#fff;
+    text-shadow:4px 0 #FF2D9B,-4px 0 #10CFC9,0 0 40px rgba(124,92,255,.7)}
+  #coin .countdown .cdnum{animation:cdpop .9s ease-out}
+  @keyframes cdpop{0%{transform:scale(.4);opacity:0}30%{transform:scale(1.1);opacity:1}100%{transform:scale(1);opacity:.85}}
+  /* ---- Methodology Madness wheel modal ---- */
+  #madness{position:absolute;inset:0;z-index:28;display:none;flex-direction:column;
+    align-items:center;justify-content:center;background:rgba(6,13,24,.92);backdrop-filter:blur(6px)}
+  #madness .mcard{display:flex;flex-direction:column;align-items:center;gap:16px;
+    background:var(--panel);border:1px solid rgba(124,92,255,.5);border-radius:14px;
+    padding:34px 48px 38px;box-shadow:0 0 44px rgba(124,92,255,.3);overflow:visible}
+  #madness .mtag{font-family:'Press Start 2P',monospace;font-size:13px;letter-spacing:2px;color:#fff;
+    animation:mtagGlitch .13s steps(2) infinite}
+  @keyframes mtagGlitch{
+    0%{text-shadow:2px 0 #FF2D9B,-2px 0 #10CFC9,0 0 16px rgba(124,92,255,.6)}
+    50%{text-shadow:-3px 1px #FF2D9B,3px -1px #10CFC9,0 0 22px rgba(255,45,155,.7)}
+    100%{text-shadow:2px 0 #FF2D9B,-2px 0 #10CFC9,0 0 16px rgba(124,92,255,.6)}}
+  #madness .mwheelwrap{position:relative;width:360px;height:360px;overflow:visible}
+  #madness .mpointer{position:absolute;top:8px;left:50%;transform:translateX(-50%);z-index:2;
+    width:0;height:0;border-left:15px solid transparent;border-right:15px solid transparent;
+    border-top:26px solid #FFC846;filter:drop-shadow(0 0 8px rgba(255,200,70,.8))}
+  #madness #madWheel{position:relative;inset:auto;width:360px;height:360px;flex:0 0 auto}
+  #madness .mresult{font-family:'Press Start 2P',monospace;font-size:16px;min-height:20px;color:#FFC846;
+    text-shadow:0 0 16px rgba(255,200,70,.6);letter-spacing:1px;text-align:center}
+
+  /* ---- Brain Blast scene ---- */
+  #blast{position:absolute;inset:0;z-index:28;display:none;flex-direction:column;
+    align-items:center;justify-content:center;background:rgba(6,12,28,.94);backdrop-filter:blur(6px);padding:40px}
+  #blast .card{width:780px;max-width:94%;background:var(--panel);border:1px solid rgba(124,92,255,.5);
+    border-radius:12px;padding:26px 34px 30px;box-shadow:0 0 50px rgba(124,92,255,.28)}
+  #blast .tag{font-family:'Press Start 2P',monospace;font-size:11px;letter-spacing:2px;
+    background:linear-gradient(90deg,#10CFC9,#7C5CFF);-webkit-background-clip:text;background-clip:text;color:transparent;margin-bottom:4px}
+  #blast .count{font-family:'Inter',sans-serif;font-weight:700;font-size:14px;color:#9fb4d0;letter-spacing:1px;margin-bottom:10px}
+  #blast .timerwrap{display:flex;align-items:center;gap:14px;margin:0 0 16px}
+  #blast .timer{flex:1;height:12px;background:#0e1c33;border:1px solid rgba(255,255,255,.1);border-radius:7px;overflow:hidden}
+  #blast .timer .bar{height:100%;width:100%;background:linear-gradient(90deg,#10CFC9,#7C5CFF)}
+  #blast .secs{font-family:'Press Start 2P',monospace;font-size:13px;color:#9ad7ff;width:54px;text-align:right}
+  #blast .def{font-family:'Inter',sans-serif;font-weight:600;font-size:23px;color:#fff;line-height:1.3;margin-bottom:20px;min-height:60px}
+  #blast .opts{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:12px}
+  #blast .opt{min-width:0;font-family:'Inter',sans-serif;font-weight:700;font-size:19px;color:#dceaff;
+    background:#13243f;border:1px solid rgba(255,255,255,.1);border-radius:8px;padding:15px 16px;cursor:pointer;text-align:center;transition:background .12s,border-color .12s}
+  @media (hover:hover){ #blast .opt:hover{background:#1a3050;border-color:#7C5CFF} }
+  #blast .opt.picked{background:#243a63;border-color:#9ad7ff}
+  /* reveal */
+  #blast .reveal{display:none;text-align:center}
+  #blast .cards{display:flex;justify-content:center;gap:22px;margin:8px 0 22px}
+  #blast .bbcard{width:120px;height:120px;border-radius:16px;display:flex;align-items:center;justify-content:center;
+    font-family:"Segoe UI Symbol","Apple Symbols","DejaVu Sans",sans-serif;
+    font-size:64px;font-weight:800;background:#13243f;border:2px solid rgba(255,255,255,.12);color:#5f7799;transform:scale(.6);opacity:.4}
+  #blast .bbcard.pop{animation:bbpop .42s cubic-bezier(.2,1.4,.4,1) forwards}
+  #blast .bbcard.hit{border-color:#10CFC9;color:#7CFFB0;background:rgba(0,152,69,.22)}
+  #blast .bbcard.miss{border-color:#B83131;color:#FF6B6B;background:rgba(184,49,49,.22)}
+  @keyframes bbpop{0%{transform:scale(.6);opacity:.4}60%{transform:scale(1.18)}100%{transform:scale(1);opacity:1}}
+  #blast .outcome{font-family:'Press Start 2P',monospace;font-size:14px;min-height:18px}
+
+  /* portrait / too-small guard */
+  #guard{position:absolute;inset:0;z-index:40;display:none;flex-direction:column;
+    align-items:center;justify-content:center;background:#06101f;text-align:center;padding:30px}
+  #guard p{font-family:'Press Start 2P',monospace;font-size:11px;line-height:2;color:var(--sky)}
+
+  /* ---- Season gate: HIGH SCORES behind fogged glass ----
+     The table still loads (so the glass has something under it) but is
+     blurred, dimmed and inert; the card header and its close button stay
+     crisp above the pane so the player can still back out. Driven by
+     data-season on <html>, set from SEASON_CLOSED in the script. */
+  #scores .sc-card{position:relative}
+  #scores .sc-head{position:relative;z-index:3}
+  #scores .season-veil{display:none}
+  html[data-season="closed"] #scores .sc-tabs,
+  html[data-season="closed"] #scores .sc-colhead,
+  html[data-season="closed"] #scores .sc-list{filter:blur(7px) saturate(.5) brightness(.75);pointer-events:none;user-select:none}
+  html[data-season="closed"] #scores .season-veil{
+    position:absolute;inset:0;z-index:2;display:flex;overflow:hidden;
+    flex-direction:column;align-items:center;justify-content:center;text-align:center;gap:16px;padding:70px 28px 28px;
+    background:
+      repeating-linear-gradient(0deg, rgba(255,255,255,.028) 0 1px, transparent 1px 3px),
+      linear-gradient(160deg, rgba(255,255,255,.08) 0%, rgba(255,255,255,0) 40%, rgba(0,0,0,.22) 100%),
+      rgba(8,14,28,.42);
+    -webkit-backdrop-filter:blur(6px) brightness(.9);backdrop-filter:blur(6px) brightness(.9);
+    box-shadow:inset 0 0 70px rgba(0,0,0,.45)}
+  #scores .sv-title{position:relative;font-family:'Press Start 2P',monospace;font-size:16px;line-height:1.5;letter-spacing:2px;color:#fff;
+    text-shadow:0 0 16px rgba(16,207,201,.45);animation:svJitter 3.1s steps(1) infinite}
+  #scores .sv-title::before,#scores .sv-title::after{content:attr(data-text);position:absolute;left:0;top:0;width:100%;height:100%;
+    overflow:hidden;opacity:0;pointer-events:none;text-shadow:none}
+  #scores .sv-title::before{color:#10CFC9;animation:svSliceA 3.1s steps(1) infinite}
+  #scores .sv-title::after{color:#FF2D9B;animation:svSliceB 3.1s steps(1) infinite}
+  @keyframes svSliceA{
+    0%,100%{opacity:0}
+    62%{opacity:1;clip-path:inset(12% 0 64% 0);transform:translate(-5px,-2px)}
+    64%{clip-path:inset(48% 0 26% 0);transform:translate(4px,1px)}
+    66%{clip-path:inset(78% 0 4% 0);transform:translate(-3px,0)}
+    68%{clip-path:inset(30% 0 52% 0);transform:translate(6px,2px)}
+    70%{opacity:0}
+    88%{opacity:1;clip-path:inset(60% 0 20% 0);transform:translate(-6px,0)}
+    90%{opacity:0}}
+  @keyframes svSliceB{
+    0%,100%{opacity:0}
+    61%{opacity:1;clip-path:inset(70% 0 8% 0);transform:translate(5px,1px)}
+    63%{clip-path:inset(18% 0 62% 0);transform:translate(-4px,-1px)}
+    65%{clip-path:inset(40% 0 38% 0);transform:translate(3px,2px)}
+    67%{clip-path:inset(84% 0 2% 0);transform:translate(-6px,0)}
+    69%{opacity:0}
+    89%{opacity:1;clip-path:inset(6% 0 76% 0);transform:translate(6px,-1px)}
+    91%{opacity:0}}
+  @keyframes svJitter{
+    0%,100%{transform:none;opacity:1}
+    62%{transform:skewX(-6deg) translateX(2px)}
+    64%{transform:skewX(4deg) translateX(-3px)}
+    66%{transform:none}
+    68%{transform:translateX(2px);opacity:.82}
+    70%{transform:none;opacity:1}
+    88%{transform:skewX(8deg)}
+    90%{transform:none}}
+  #scores .sv-line{font-family:'Inter',sans-serif;font-weight:700;font-size:11px;letter-spacing:3px;text-transform:uppercase;color:#cfe6ff}
+  #scores .sv-line.soon{color:#10CFC9}
+  #scores .sv-line.soon::after{content:'_';animation:svBlink 1s steps(1) infinite}
+  @keyframes svBlink{50%{opacity:0}}
+  #scores .sv-bar{width:160px;height:2px;background:rgba(16,207,201,.22);position:relative;overflow:hidden}
+  #scores .sv-bar::after{content:'';position:absolute;inset:0;width:35%;background:#10CFC9;animation:svScan 2.2s ease-in-out infinite}
+  @keyframes svScan{0%{transform:translateX(-120%)}100%{transform:translateX(320%)}}
+  #scores .sv-tear{position:absolute;left:0;right:0;top:-4px;height:3px;pointer-events:none;
+    background:rgba(255,255,255,.14);mix-blend-mode:screen;animation:svTear 5.3s linear infinite}
+  @keyframes svTear{0%{top:-4px;opacity:0}4%{opacity:1}38%{top:100%;opacity:.6}39%,100%{opacity:0}}
+  @media (prefers-reduced-motion:reduce){
+    #scores .sv-title,#scores .sv-title::before,#scores .sv-title::after,#scores .sv-bar::after,#scores .sv-tear,#scores .sv-line.soon::after{animation:none}
+    #scores .sv-title::before{opacity:.8;clip-path:inset(0 0 55% 0);transform:translate(-2px,0)}
+    #scores .sv-title::after{opacity:.8;clip-path:inset(55% 0 0 0);transform:translate(2px,0)}}
+</style>
+</head>
+<body>
+<div id="stage">
+  <div id="frame">
+    <div id="audioToggles">
+      <button id="muteMusic" title="Music on/off" onclick="toggleMusicMute()"></button>
+      <button id="muteSfx" title="Sound FX on/off" onclick="toggleSfxMute()"></button>
+      <button id="pauseBtn" title="Pause" onclick="togglePauseMenu()">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#cfe6ff" stroke-width="2.4" stroke-linecap="round">
+          <path d="M9 5v14M15 5v14"/></svg>
+      </button>
+      <button id="exitBtn" title="Leave the game" onclick="exitToRoom()">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#ff8a8a" stroke-width="2.4" stroke-linecap="round">
+          <path d="M6 6l12 12M18 6L6 18"/></svg>
+      </button>
+      <button id="fsBtn" title="Full screen" onclick="toggleFullscreen()">
+        <svg id="fsIcoEnter" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#cfe6ff" stroke-width="2.4" stroke-linecap="round">
+          <path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg>
+        <svg id="fsIcoExit" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#10CFC9" stroke-width="2.4" stroke-linecap="round" style="display:none">
+          <path d="M9 4v5H4M15 4v5h5M9 20v-5H4M15 20v-5h5"/></svg>
+      </button>
+    </div>
+    <canvas id="game" width="1280" height="720"></canvas>
+    <video id="freezeVid" muted playsinline preload="auto"></video>
+
+    <div class="ident" id="ident">PRACTICE MODE</div>
+
+    <!-- START -->
+    <div id="start">
+      <video autoplay muted loop playsinline>
+        <source src="assets/ui/video/BlitzStartScreen.webm" type="video/webm">
+      </video>
+      <div class="scrim"></div>
+      <button class="btn" id="playBtn">PRESS START</button>
+      <button class="btn btn-ghost" id="howBtn">HOW TO PLAY</button>
+    </div>
+
+    <!-- TUTORIAL (paged splash overlay) -->
+    <div id="tutorial">
+      <div class="tut-card">
+        <div class="tut-head">
+          <div class="tut-title">HOW TO PLAY</div>
+          <button class="tut-close" id="tutClose">&times;</button>
+        </div>
+
+        <div class="tut-pages">
+          <!-- PAGE 1: BASICS -->
+          <div class="tut-page active" data-page="0">
+            <canvas id="tutDemo" width="240" height="140"></canvas>
+            <div class="tut-sub">THE BASICS</div>
+            <div class="tut-text">
+              <p><b>Aim and fire.</b> Move your mouse to aim, click or press <b>SPACE</b> to launch a data orb at the D.O.R.C.S.</p>
+              <p><b>Match colors.</b> Land your orb against <b>2 or more</b> D.O.R.C.S. of the same color to knock the cluster down.</p>
+              <p><b>Hold the line.</b> Clear them before the swarm descends past the bottom marker. Bigger clusters score bigger.</p>
+              <p><b>Earn new colors.</b> Beat the <b>Demofest high score</b> in a single run and a tougher D.O.R.C. color joins the board &mdash; proof you're at the top of the room.</p>
+            </div>
+          </div>
+
+          <!-- PAGE 2: BRAIN FREEZE + BRAIN BLAST -->
+          <div class="tut-page" data-page="1">
+            <div class="tut-sub">POWER-UPS &middot; DEFENSE</div>
+            <div class="tut-grid">
+              <div class="tut-pow">
+                <canvas class="pow-ico" id="powFreeze" width="120" height="120"></canvas>
+                <div class="pow-name">BRAIN FREEZE</div>
+                <div class="pow-desc">Pop a <b>question orb</b> on the board and answer a Qlik product question. Get it right to <b>slow the swarm's descent</b> for a few seconds and buy yourself time.</div>
+              </div>
+              <div class="tut-pow">
+                <canvas class="pow-ico" id="powBlast" width="200" height="64"></canvas>
+                <div class="pow-name">BRAIN BLAST</div>
+                <div class="pow-desc">Knock down D.O.R.C.S. to fill the <b>Blast meter</b> in your HUD. When it reads <b>READY</b>, click it to take on <b>3 Qlik glossary terms</b> &mdash; nail all three to wipe the bottom rows.</div>
+              </div>
+            </div>
+          </div>
+
+          <!-- PAGE 3: METHODOLOGY COIN + MADNESS -->
+          <div class="tut-page" data-page="2">
+            <div class="tut-sub">POWER-UPS &middot; METHODOLOGY</div>
+            <div class="tut-grid">
+              <div class="tut-pow">
+                <canvas class="pow-ico" id="powCoin" width="120" height="120"></canvas>
+                <div class="pow-name">METHODOLOGY COIN</div>
+                <div class="pow-desc">Pop a <b>coin</b> to answer a Qlik Sales Methodology question. Bank <b>3</b> coins to trigger Methodology Madness.</div>
+              </div>
+              <div class="tut-pow">
+                <canvas class="pow-ico" id="powMadness" width="120" height="120"></canvas>
+                <div class="pow-name">METHODOLOGY MADNESS</div>
+                <div class="pow-desc">Spin the wheel for <b>1&ndash;5 Madness Orbs</b> &mdash; colorless bombs that vaporize every D.O.R.C. they touch and chain through their color.</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="tut-nav">
+          <button class="tut-arrow" id="tutPrev">&lsaquo;</button>
+          <div class="tut-dots" id="tutDots"></div>
+          <button class="tut-arrow" id="tutNext">&rsaquo;</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- LOADING -->
+    <div id="loading">
+      <div class="ltitle">SIDE-QLIK BLITZ</div>
+      <div class="lbarwrap"><div class="lbar" id="loadBar"></div></div>
+      <div class="lpct" id="loadPct">LOADING&hellip; 0%</div>
+    </div>
+
+    <!-- GAME OVER -->
+    <div id="over">
+      <canvas id="overFx" width="1280" height="720"></canvas>
+      <div class="over-card">
+        <div class="over-title">GAME OVER</div>
+        <div id="overHighBanner" class="over-high">&#9733; NEW DEMOFEST HIGH &#9733;</div>
+        <div class="over-scorelabel">FINAL SCORE</div>
+        <div class="over-score" id="finalScore">0</div>
+        <div class="over-row"><span>DEMOFEST HIGH</span><b id="overTerrHigh">2,500</b></div>
+        <div class="over-row"><span>TIME PLAYED</span><b id="overTime">0:00</b></div>
+        <div class="over-divider"></div>
+        <div class="over-stathead">THIS ROUND</div>
+        <div class="over-stat"><span class="ic ic-fz">&#10052;</span><span class="nm">BRAIN FREEZE</span><b id="overQ">0/0</b></div>
+        <div class="over-stat"><span class="ic ic-cn">&#9737;</span><span class="nm">METHODOLOGY</span><b id="overC">0/0</b></div>
+        <div class="over-stat"><span class="ic ic-bb">&#9889;</span><span class="nm">BRAIN BLAST</span><b id="overT">0/0</b></div>
+        <div class="over-btns">
+          <button class="btn" id="againBtn">PLAY AGAIN</button>
+          <button class="btn btn-ghost2" id="scoresBtn">VIEW SCORES</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ARCADE SCORES -->
+    <div id="scores">
+      <div class="sc-card">
+        <div class="sc-head">
+          <div class="sc-title">HIGH SCORES</div>
+          <button class="sc-close" id="scClose">&times;</button>
+        </div>
+        <div class="sc-tabs" id="scTabs"></div>
+        <div class="sc-colhead"><span class="sc-rank">#</span><span class="sc-tri">TRIGRAM</span><span class="sc-flag"></span><span class="sc-hi">HIGH</span><span class="sc-time">LONGEST</span></div>
+        <div class="sc-list" id="scList"></div>
+        <!-- SEASON GATE: the fogged glass. Shown only under html[data-season="closed"]. -->
+        <div class="season-veil" role="status" aria-live="polite">
+          <div class="sv-tear"></div>
+          <div class="sv-title" data-text="THANK YOU FOR PLAYING">THANK YOU FOR PLAYING</div>
+          <div class="sv-line">SEASON 1 HAS CONCLUDED</div>
+          <div class="sv-bar"></div>
+          <div class="sv-line soon">SEASON 2 BEGINNING SOON</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- PAUSE -->
+    <div id="pause">
+      <h2>PAUSED</h2>
+      <div class="row"><label>Music</label><input type="range" id="volMusic" min="0" max="100"><span class="val" id="valMusic">60</span></div>
+      <div class="row"><label>Sound FX</label><input type="range" id="volSfx" min="0" max="100"><span class="val" id="valSfx">80</span></div>
+      <button class="btn" id="resumeBtn">RESUME</button>
+    </div>
+
+    <!-- QUIZ -->
+    <div id="quiz">
+      <div class="card">
+        <div class="tag">&#10052;&#65039; BRAIN FREEZE</div>
+        <div class="qprompt" id="qPrompt">Loading question&hellip;</div>
+        <div class="qopts" id="qOpts"></div>
+        <div class="qresult" id="qResult"></div>
+      </div>
+    </div>
+
+    <!-- COIN (Methodology Token) -->
+    <div id="coin">
+      <div class="card">
+        <div class="tag" id="coinTag">&#129689; METHODOLOGY TOKEN</div>
+        <div class="reel-window" id="coinReel">
+          <div class="reel-pointer reel-pointer-l"></div>
+          <div class="reel-pointer reel-pointer-r"></div>
+          <div class="reel-strip" id="coinReelStrip"></div>
+          <div class="reel-fade reel-fade-top"></div>
+          <div class="reel-fade reel-fade-bot"></div>
+        </div>
+        <div class="timerwrap" id="coinTimerwrap">
+          <div class="timer"><div class="bar" id="coinBar"></div></div>
+          <div class="secs" id="coinSecs">10.0</div>
+        </div>
+        <div class="qprompt" id="coinPrompt"><div class="pone" id="coinPromptOne">Loading question&hellip;</div></div>
+        <div class="qdivider" id="coinDivider"></div>
+        <div class="qzone" id="coinZone">
+          <div class="countdown" id="coinCountdown"></div>
+          <div class="qopts" id="coinOpts"></div>
+        </div>
+        <div class="cresult" id="coinResult"></div>
+        <div class="cwhy" id="coinWhy"></div>
+        <div style="text-align:center"><button class="coinContinue" id="coinContinue" onclick="closeCoin()">CONTINUE &#9656;</button></div>
+      </div>
+    </div>
+
+    <!-- METHODOLOGY MADNESS wheel -->
+    <div id="madness">
+      <div class="mcard">
+        <div class="mtag">&#9889; METHODOLOGY MADNESS</div>
+        <div class="mwheelwrap">
+          <div class="mpointer"></div>
+          <canvas id="madWheel" width="360" height="360"></canvas>
+        </div>
+        <div class="mresult" id="madResult"></div>
+      </div>
+    </div>
+
+    <!-- BRAIN BLAST -->
+    <div id="blast">
+      <div class="card">
+        <div class="tag">&#129504; BRAIN BLAST</div>
+        <div id="bbQwrap">
+          <div class="count" id="bbCount">QUESTION 1 / 3</div>
+          <div class="timerwrap">
+            <div class="timer"><div class="bar" id="bbBar"></div></div>
+            <div class="secs" id="bbSecs">10.0</div>
+          </div>
+          <div class="def" id="bbDef">Loading&hellip;</div>
+          <div class="opts" id="bbOpts"></div>
+        </div>
+        <div class="reveal" id="bbReveal">
+          <div class="count">RESULTS</div>
+          <div class="cards" id="bbCards"></div>
+          <div class="outcome" id="bbOutcome"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- GUARD -->
+    <div id="guard"><p>&#9888;<br>Rotate to landscape<br>or use a larger screen</p></div>
+  </div>
+</div>
+
+<script>
+/* ============================================================================
+   SIDE-QLIK BLITZ  —  slice 1 (core hex shooter)
+   Single-file game for the REC Room game iframe.
+   Internal resolution is locked at 1280x720; #frame is CSS-scaled to fit.
+
+   INTEGRATION (handled by the REC Room parent, NOT here):
+     parent -> game :  postMessage({type:'BLITZ_INIT', trigram, territory,
+                                    country_code, lifetime})
+     game -> parent :  postMessage({type:'BLITZ_RESULT', trigram, territory,
+                                    country_code, score, attempted, correct,
+                                    stats:{questions,coins,terms}, durationSec})
+   The game never holds the session key. The parent authenticates + calls
+   /api/logScore. Loaded standalone, the game runs in PRACTICE MODE and never
+   reports a score.
+   ============================================================================ */
+'use strict';
+
+/* ---- asset base (overridable for local testing via ?assets=...) ---- */
+const ASSET_BASE = new URLSearchParams(location.search).get('assets') || 'assets/';
+const API_BASE = '/api/blitz/';   // consolidated QlikGSE root api, blitz namespace
+
+/* ---- Season gate (see CLAUDE.md "Season gate") ----
+   Play goes on and every run still banks; only the HIGH SCORES table is
+   sealed behind fogged glass. Flip in step with the two room pages. */
+const SEASON_CLOSED = false;   // Demofest: standings always visible
+if (SEASON_CLOSED) document.documentElement.setAttribute('data-season', 'closed');
+
+/* ============================================================================
+   AUDIO  —  Web Audio bus. Two channels: Music + Sound FX, each its own volume.
+   Music runs element -> lowpass filter -> gain -> speakers, so the pause menu
+   can muffle it ("outside" sound) and the freeze power-up can duck it.
+   SFX/voice/hazard are one-shot elements scaled by sfxVol; blips are synthesized.
+   ============================================================================ */
+const AUDIO = { base: ASSET_BASE + 'audio/', musicVol: 0.35, sfxVol: 0.8, bgm:null, voice:null };
+/* Three BG tracks instead of one looping forever. Drawn from a shuffled bag
+   (makeBag/bagNext, the same helper the Side-Qlik voice lines use): the
+   session opens on a RANDOM track, all three play before any repeats, then
+   it reshuffles and goes again for as long as the tab is open. One looping
+   song for a whole session was maddening. */
+const MUSIC_TRACKS = ['Blitz_BG_Music_01.mp3', 'Blitz_BG_Music_02.mp3', 'Blitz_BG_Music_03.mp3'];
+let musicBag = null, musicWired = false;
+
+function nextTrackSrc(){
+  if (!musicBag) musicBag = makeBag(MUSIC_TRACKS.length);   // shuffles on first draw
+  return AUDIO.base + 'music/' + MUSIC_TRACKS[bagNext(musicBag) - 1];
+}
+const FREEZE_BG_SRC  = AUDIO.base + 'other/power_up_fx/freeze/freeze_bg_10s.mp3';
+const MULTIPOP_COUNT = 30, FREEZE_QUIP_COUNT = 6, DZONE_COUNT = 16;
+
+function loadVols(){ try{
+  const m=localStorage.getItem('blitz_music2'), s=localStorage.getItem('blitz_sfx2');
+  if(m!==null) AUDIO.musicVol=Math.max(0,Math.min(1,+m));
+  if(s!==null) AUDIO.sfxVol  =Math.max(0,Math.min(1,+s));
+}catch(e){} }
+function saveVols(){ try{ localStorage.setItem('blitz_music2',AUDIO.musicVol); localStorage.setItem('blitz_sfx2',AUDIO.sfxVol); }catch(e){} }
+loadVols();
+
+/* ---- mute toggles (icons on the player + menu). Save/restore the live vols so
+   every SFX/music path that reads AUDIO.*Vol honors the mute with no extra wiring. */
+let musicMuted=false, sfxMuted=false, savedMusicVol=AUDIO.musicVol||0.35, savedSfxVol=AUDIO.sfxVol||0.8;
+function toggleMusicMute(){
+  musicMuted=!musicMuted;
+  if(musicMuted){ savedMusicVol=AUDIO.musicVol||savedMusicVol; AUDIO.musicVol=0; }
+  else { AUDIO.musicVol=savedMusicVol||0.35; }
+  if(musicGain) applyMusicGain(0.2); else if(AUDIO.bgm) AUDIO.bgm.volume=AUDIO.musicVol;
+  saveVols(); updateAudioIcons();
+}
+function toggleSfxMute(){
+  sfxMuted=!sfxMuted;
+  if(sfxMuted){ savedSfxVol=AUDIO.sfxVol||savedSfxVol; AUDIO.sfxVol=0; }
+  else { AUDIO.sfxVol=savedSfxVol||0.8; }
+  saveVols(); updateAudioIcons();
+}
+const ICON_MUSIC_ON='<svg width="20" height="20" viewBox="0 0 24 24" fill="none"><path d="M9 18V5l10-2v13" stroke="#10CFC9" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><circle cx="6" cy="18" r="3" stroke="#10CFC9" stroke-width="2"/><circle cx="16" cy="16" r="3" stroke="#10CFC9" stroke-width="2"/></svg>';
+const ICON_MUSIC_OFF='<svg width="20" height="20" viewBox="0 0 24 24" fill="none"><path d="M9 18V5l10-2v13" stroke="#5a6b85" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><circle cx="6" cy="18" r="3" stroke="#5a6b85" stroke-width="2"/><circle cx="16" cy="16" r="3" stroke="#5a6b85" stroke-width="2"/><line x1="3" y1="3" x2="21" y2="21" stroke="#FF2D9B" stroke-width="2" stroke-linecap="round"/></svg>';
+const ICON_SFX_ON='<svg width="20" height="20" viewBox="0 0 24 24" fill="none"><path d="M4 9v6h4l5 4V5L8 9H4z" stroke="#10CFC9" stroke-width="2" stroke-linejoin="round"/><path d="M16 8a5 5 0 010 8" stroke="#10CFC9" stroke-width="2" stroke-linecap="round"/></svg>';
+const ICON_SFX_OFF='<svg width="20" height="20" viewBox="0 0 24 24" fill="none"><path d="M4 9v6h4l5 4V5L8 9H4z" stroke="#5a6b85" stroke-width="2" stroke-linejoin="round"/><line x1="17" y1="9" x2="22" y2="15" stroke="#FF2D9B" stroke-width="2" stroke-linecap="round"/><line x1="22" y1="9" x2="17" y2="15" stroke="#FF2D9B" stroke-width="2" stroke-linecap="round"/></svg>';
+function updateAudioIcons(){
+  const m=document.getElementById('muteMusic'), s=document.getElementById('muteSfx');
+  if(m) m.innerHTML = musicMuted ? ICON_MUSIC_OFF : ICON_MUSIC_ON;
+  if(s) s.innerHTML = sfxMuted ? ICON_SFX_OFF : ICON_SFX_ON;
+}
+
+/* ---- shared Web Audio context (music graph + blips) ---- */
+let actx=null;
+function ac(){ if(!actx){ try{ actx=new (window.AudioContext||window.webkitAudioContext)(); }catch(e){} } return actx; }
+
+/* ---- music graph:  element -> lowpass filter -> gain -> speakers ----
+   filter = menu muffle ("outside" sound);  gain = volume + freeze ducking */
+let musicSrcNode=null, musicFilter=null, musicGain=null, musicDuck=1;
+function ensureMusicGraph(){
+  const c=ac(); if(!c || !AUDIO.bgm || musicSrcNode) return;
+  try{
+    musicSrcNode = c.createMediaElementSource(AUDIO.bgm);
+    musicFilter  = c.createBiquadFilter(); musicFilter.type='lowpass'; musicFilter.frequency.value=20000;
+    musicGain    = c.createGain(); musicGain.gain.value=AUDIO.musicVol;
+    musicSrcNode.connect(musicFilter); musicFilter.connect(musicGain); musicGain.connect(c.destination);
+    AUDIO.bgm.volume=1;                 // level handled by musicGain from here on
+  }catch(e){}
+}
+function applyMusicGain(ramp){
+  if(!musicGain||!actx) return;
+  const t=actx.currentTime, target=AUDIO.musicVol*musicDuck;
+  musicGain.gain.cancelScheduledValues(t);
+  musicGain.gain.setValueAtTime(musicGain.gain.value, t);
+  if(ramp) musicGain.gain.linearRampToValueAtTime(target, t+ramp);
+  else musicGain.gain.setValueAtTime(target, t);
+}
+function setMenuMuffle(on){
+  if(!musicFilter||!actx) return;
+  const t=actx.currentTime;
+  musicFilter.frequency.cancelScheduledValues(t);
+  musicFilter.frequency.setValueAtTime(Math.max(60,musicFilter.frequency.value), t);
+  musicFilter.frequency.exponentialRampToValueAtTime(on?480:20000, t+0.4);   // muffled vs open
+}
+
+function startMusic(){ try{
+  if(!MUSIC_TRACKS.length) return;
+  /* ONE element for the whole session, and the track swaps by changing .src.
+     It cannot be a fresh Audio() per track: ensureMusicGraph() calls
+     createMediaElementSource(AUDIO.bgm), which may only ever be called ONCE
+     per element, and the node it returns is what carries volume, freeze
+     ducking and the menu muffle. A new element would be a second graph the
+     rest of the game has no handle on - silent music that ignores the
+     volume slider. Changing .src on an element already in the graph keeps
+     every one of those working. */
+  if(!AUDIO.bgm){
+    AUDIO.bgm = new Audio(nextTrackSrc());
+    AUDIO.bgm.loop = false;          // the playlist advances; looping would trap track one
+  }
+  if(!musicWired){                   // bind once, not per track
+    musicWired = true;
+    AUDIO.bgm.addEventListener('ended', function(){
+      try{ AUDIO.bgm.src = nextTrackSrc(); AUDIO.bgm.play().catch(function(){}); }catch(e){}
+    });
+  }
+  ensureMusicGraph();
+  const c=ac(); if(c && c.state==='suspended') c.resume();   // PRESS START is a user gesture
+  if(musicGain) applyMusicGain(0); else AUDIO.bgm.volume=AUDIO.musicVol;
+  AUDIO.bgm.play().catch(()=>{});
+}catch(e){} }
+function stopMusic(){ try{ if(AUDIO.bgm) AUDIO.bgm.pause(); }catch(e){} }
+
+/* ---- one-shot SFX + single-instance Side-Qlik voice ---- */
+/* ---- SFX through Web Audio, not <audio> elements -------------------------
+   Every `new Audio()` registers with iOS's media session, so on iPhone each
+   sound effect popped its own audio control into the UI — tap it and you were
+   scrubbing a 200ms explosion. Web Audio has no media session, so the control
+   never appears.
+
+   Decoded buffers are cached, which also stops the same clip being refetched
+   and redecoded on every play — there are 57 of them.
+
+   Falls back to the old <audio> path if Web Audio is unavailable, so a browser
+   without it still gets sound (with the icon, which beats silence). */
+const sfxCache = new Map();
+function sfxPlayBuffer(ctx, buf, vol){
+  const src = ctx.createBufferSource(); src.buffer = buf;
+  const g = ctx.createGain(); g.gain.value = vol;
+  src.connect(g); g.connect(ctx.destination);
+  src.start(0);
+  return src;
+}
+function sfxLoad(ctx, url){
+  if (sfxCache.has(url)) return sfxCache.get(url);
+  const p = fetch(url).then(r => r.arrayBuffer()).then(a => ctx.decodeAudioData(a));
+  sfxCache.set(url, p);
+  p.catch(() => sfxCache.delete(url));      // let a failed load be retried
+  return p;
+}
+function playSfxFile(path, rel){ try{
+  const ctx = ac(), url = AUDIO.base + path, vol = AUDIO.sfxVol*(rel==null?1:rel);
+  if (!ctx){ const a=new Audio(url); a.volume=vol; a.play().catch(()=>{}); return; }
+  if (ctx.state === 'suspended') ctx.resume().catch(()=>{});
+  Promise.resolve(sfxLoad(ctx, url)).then(b => sfxPlayBuffer(ctx, b, vol)).catch(()=>{});
+}catch(e){} }
+function playVoice(path){ try{
+  const ctx = ac(), url = AUDIO.base + path;
+  stopVoice();                                        // voice lines never overlap
+  if (!ctx){ AUDIO.voice=new Audio(url); AUDIO.voice.volume=AUDIO.sfxVol; AUDIO.voice.play().catch(()=>{}); return; }
+  if (ctx.state === 'suspended') ctx.resume().catch(()=>{});
+  Promise.resolve(sfxLoad(ctx, url)).then(b => {
+    AUDIO.voiceSrc = sfxPlayBuffer(ctx, b, AUDIO.sfxVol);
+  }).catch(()=>{});
+}catch(e){} }
+function stopVoice(){
+  // Two paths now: a Web Audio BufferSource (the normal one) and the <audio>
+  // fallback. Stop whichever is live, or overlapping voice lines come back.
+  try{ if(AUDIO.voiceSrc){ AUDIO.voiceSrc.stop(); AUDIO.voiceSrc=null; } }catch(e){ AUDIO.voiceSrc=null; }
+  try{ if(AUDIO.voice){ AUDIO.voice.pause(); AUDIO.voice.currentTime=0; } }catch(e){}
+}
+/* ---- voice line bags ------------------------------------------------------
+   Draw without replacement so a quip cannot repeat inside a round. The bag is
+   reshuffled only once it runs dry, so the order differs every game and no clip
+   is pinned to a fixed slot. On a refill the first draw is swapped away from the
+   clip we just played, so nothing is heard twice across the seam.
+   Reset per playthrough by resetVoiceBags() in startGame. */
+function makeBag(count){ return { count, pool:[], last:0 }; }
+function bagNext(bag){
+  if (!bag.pool.length){
+    bag.pool = Array.from({length:bag.count}, (_,i)=>i+1);
+    for (let i=bag.pool.length-1;i>0;i--){ const j=Math.floor(Math.random()*(i+1)); [bag.pool[i],bag.pool[j]]=[bag.pool[j],bag.pool[i]]; }
+    if (bag.count>1 && bag.pool[bag.pool.length-1]===bag.last){
+      const k=Math.floor(Math.random()*(bag.pool.length-1));
+      [bag.pool[bag.pool.length-1],bag.pool[k]]=[bag.pool[k],bag.pool[bag.pool.length-1]];
+    }
+  }
+  bag.last = bag.pool.pop();
+  return bag.last;
+}
+const BAGS = { multipop:makeBag(MULTIPOP_COUNT), freeze:makeBag(FREEZE_QUIP_COUNT), dzone:makeBag(DZONE_COUNT) };
+function resetVoiceBags(){ for (const b of Object.values(BAGS)){ b.pool.length=0; b.last=0; } }
+
+function sideQlikLine(){
+  if (HZ.inZone) return;   // quiet during a hazard alert
+  playVoice(`side-qlik/multi-pop/Side-Qlik${bagNext(BAGS.multipop)}.mp3`);
+}
+function freezeQuip(){
+  playVoice(`side-qlik/freeze-power-up/side-qlik-freeze-${bagNext(BAGS.freeze)}.mp3`);
+}
+
+/* ---- freeze power-up audio: ambience layer + duck the music ---- */
+let freezeBg=null, freezeAudioOn=false, freezeVidEl=null;
+const FREEZE_BG_VOL = 0.45;   // freeze ambience sits back under the SFX channel
+function freezeVid(){
+  if(!freezeVidEl){ freezeVidEl=document.getElementById('freezeVid');
+    if(freezeVidEl && !freezeVidEl.getAttribute('src')) freezeVidEl.src=ASSET_BASE+'ui/video/freeze_frame_overlay.webm';
+  }
+  return freezeVidEl;
+}
+function startFreezeAudio(){
+  if(freezeAudioOn) return; freezeAudioOn=true;
+  musicDuck=0; applyMusicGain(0.5);                      // fade the BG music out
+  try{ freezeBg=new Audio(FREEZE_BG_SRC); freezeBg.volume=AUDIO.sfxVol*FREEZE_BG_VOL; freezeBg.play().catch(()=>{}); }catch(e){}
+  try{ const v=freezeVid(); if(v){ v.currentTime=0; v.play().catch(()=>{}); } }catch(e){}  // crystal frost (composited in render)
+  freezeQuip();
+}
+function stopFreezeAudio(){
+  if(!freezeAudioOn) return; freezeAudioOn=false;
+  musicDuck=1; applyMusicGain(0.8);                      // fade it back in
+  try{ if(freezeBg){ freezeBg.pause(); freezeBg=null; } }catch(e){}
+  try{ const v=freezeVid(); if(v){ v.pause(); } }catch(e){}
+}
+
+/* synth blips for pop/fire/land */
+function blip(freq, dur, type){
+  const c=ac(); if(!c||AUDIO.sfxVol<=0) return;
+  try{
+    const o=c.createOscillator(), g=c.createGain();
+    o.type=type||'square'; o.frequency.value=freq;
+    o.connect(g); g.connect(c.destination);
+    const t=c.currentTime, v=Math.max(0.0002, 0.22*AUDIO.sfxVol);
+    g.gain.setValueAtTime(0.0001,t);
+    g.gain.exponentialRampToValueAtTime(v,t+0.012);
+    g.gain.exponentialRampToValueAtTime(0.0001,t+dur);
+    o.start(t); o.stop(t+dur+0.03);
+  }catch(e){}
+}
+function coinJingle(){
+  const c=ac(); if(!c||AUDIO.sfxVol<=0) return;
+  try{
+    [[987.77,0],[1318.5,0.09]].forEach(([f,dt])=>{
+      const o=c.createOscillator(), g=c.createGain();
+      o.type='square'; o.frequency.value=f;
+      o.connect(g); g.connect(c.destination);
+      const t=c.currentTime+dt, v=Math.max(0.0002, 0.18*AUDIO.sfxVol);
+      g.gain.setValueAtTime(0.0001,t);
+      g.gain.exponentialRampToValueAtTime(v,t+0.01);
+      g.gain.exponentialRampToValueAtTime(0.0001,t+0.32);
+      o.start(t); o.stop(t+0.36);
+    });
+  }catch(e){}
+}
+const sfxFire=()=>blip(520,0.08,'square');
+const sfxPop =(n)=>blip(360+(n||0)*35,0.10,'triangle');
+const sfxLand=()=>blip(230,0.05,'sine');
+/* peppy rising "di-di-ding!" win chime — bell-ish sines, quick and upbeat */
+function blastDing(){
+  const c=ac(); if(!c||AUDIO.sfxVol<=0) return;
+  const notes=[ [784,0.00], [988,0.07], [1319,0.15] ];   // G5, B5, E6 ascending
+  const v=Math.max(0.0002, 0.18*AUDIO.sfxVol);
+  for(const [freq,delay] of notes){
+    try{
+      const o=c.createOscillator(), g=c.createGain();
+      o.type='sine'; o.frequency.value=freq;
+      o.connect(g); g.connect(c.destination);
+      const t=c.currentTime+delay;
+      g.gain.setValueAtTime(0.0001,t);
+      g.gain.exponentialRampToValueAtTime(v,t+0.012);
+      g.gain.exponentialRampToValueAtTime(0.0001,t+0.22);
+      o.start(t); o.stop(t+0.26);
+    }catch(e){}
+  }
+}
+
+/* real ball SFX (cycle in order) */
+let ballSfxIdx=0;
+function ballLaunchSfx(){ const n=String((ballSfxIdx++ % 5)+1).padStart(2,'0'); playSfxFile(`other/ball_fx/Ball_${n}.mp3`); }
+
+/* ============================================================================
+   HAZARD ZONE audio  (SFX channel)
+   When the lowest DORC crosses HAZARD_Y the player is "in the zone".
+     - every entry -> next line from the shuffled d-zone bag, so no alert
+       repeats inside a round and the order differs every game
+     - when that numbered alert ENDS, if still in zone -> d-zone-loop until clear
+     - d-zone-heartbeat plays low underneath the whole time
+     - clearing the zone -> relief SFX (real file TBD; synth chime for now)
+   Bags reset each playthrough (resetVoiceBags in startGame).
+   ============================================================================ */
+const HZ = { inZone:false, alert:null, loop:null, heart:null };
+const DZONE = 'alerts/danger_zone/';
+function hzStop(a){ try{ if(a){ a.pause(); a.currentTime=0; } }catch(e){} }
+function hzNew(file, loop, rel){ const a=new Audio(AUDIO.base+DZONE+file); a.loop=!!loop; a.volume=AUDIO.sfxVol*(rel==null?1:rel); return a; }
+
+function startHazardLoop(){
+  if(!HZ.inZone) return;
+  hzStop(HZ.loop);
+  HZ.loop = hzNew('d-zone-loop.mp3', true, 0.9);
+  HZ.loop.play().catch(()=>{});
+}
+function enterHazard(){
+  // heartbeat bed (low) under everything
+  hzStop(HZ.heart);
+  HZ.heart = hzNew('d-zone-heartbeat.mp3', true, 0.4);
+  HZ.heart.play().catch(()=>{});
+  // next from the shuffled bag: no fixed opener, no repeat inside a round
+  const n = bagNext(BAGS.dzone);
+  hzStop(HZ.loop);
+  HZ.alert = hzNew(`d-zone${n}.mp3`, false, 1.0);
+  HZ.alert.onended = () => { if(HZ.inZone) startHazardLoop(); };  // sustain into loop if still in zone
+  HZ.alert.play().catch(()=>{});
+}
+function exitHazard(){
+  hzStop(HZ.alert); hzStop(HZ.loop); hzStop(HZ.heart);
+  HZ.alert = HZ.loop = HZ.heart = null;
+  playRelief();   // player cleared the zone
+}
+function resetHazard(){
+  hzStop(HZ.alert); hzStop(HZ.loop); hzStop(HZ.heart);
+  HZ.inZone = false; HZ.alert = HZ.loop = HZ.heart = null;
+}
+function hzSetVol(){ try{
+  if(HZ.alert) HZ.alert.volume = AUDIO.sfxVol;
+  if(HZ.loop)  HZ.loop.volume  = AUDIO.sfxVol*0.9;
+  if(HZ.heart) HZ.heart.volume = AUDIO.sfxVol*0.4;
+}catch(e){} }
+function playRelief(){
+  // RELIEF SFX — real file coming soon; placeholder rising chime for now.
+  blip(740,0.12,'sine'); setTimeout(()=>blip(990,0.14,'sine'), 90);
+}
+function updateHazard(){
+  const HAZARD_Y = DANGER_Y - 90;      // top of the hazard band (narrower = must be closer to the line)
+  let nearY = 0;
+  for (let r=grid.length-1;r>=0;r--){ for (let c=0;c<grid[r].length;c++){ if (grid[r][c]){ nearY=Math.max(nearY, cellY(r)+R); } } }
+  const inNow = nearY >= HAZARD_Y;
+  if (inNow && !HZ.inZone){ HZ.inZone=true; enterHazard(); }
+  else if (!inNow && HZ.inZone){ HZ.inZone=false; exitHazard(); }
+}
+
+/* ============================================================================
+   QUESTIONS & POWER-UPS
+   Question bubbles are special tiles (color -1). Hitting one with a shot
+   consumes the shot, opens a question, and:
+     correct -> FREEZE: descent slows for FREEZE_MS
+     wrong   -> a fresh DORC row is added below the stack (toward the line)
+   Questions come from /api/getQuestions; the key is checked by /api/checkAnswer.
+   A tiny local bank is used as a fallback so the mechanic is testable offline.
+   ============================================================================ */
+const QUESTION_RATE = 0.55;   // chance a spawned row carries a special bubble
+const FREEZE_MS = 10000;
+const FREEZE_FADE_IN = 600, FREEZE_FADE_OUT = 1100;   // ms: freeze ices on / thaws off
+let freezeUntil = 0, curQ = null, answering = false;
+let freezeAmt = 0;     // 0..1 eased frost intensity (drives every freeze visual)
+let wasFrozen = false; // edge detection for the scared-state swap on freeze start/end
+
+const FORCE_LOCAL_QUESTIONS = false;  // draw from /api/getQuestions (DB); local bank is offline fallback only
+const LOCAL_Q = [
+  { id:-1, prompt:'QUESTION 1: THIS IS A TEST. THE ANSWER IS A',
+    options:[{key:'a',text:'Answer A (correct)'},{key:'b',text:'Answer B'},{key:'c',text:'Answer C'},{key:'d',text:'Answer D'}], correct:'a' },
+  { id:-2, prompt:'QUESTION 2: THIS IS A TEST. THE ANSWER IS B',
+    options:[{key:'a',text:'Answer A'},{key:'b',text:'Answer B (correct)'},{key:'c',text:'Answer C'},{key:'d',text:'Answer D'}], correct:'b' },
+  { id:-3, prompt:'QUESTION 3: THIS IS A TEST. THE ANSWER IS C',
+    options:[{key:'a',text:'Answer A'},{key:'b',text:'Answer B'},{key:'c',text:'Answer C (correct)'},{key:'d',text:'Answer D'}], correct:'c' },
+  { id:-4, prompt:'QUESTION 4: THIS IS A TEST. THE ANSWER IS D',
+    options:[{key:'a',text:'Answer A'},{key:'b',text:'Answer B'},{key:'c',text:'Answer C'},{key:'d',text:'Answer D (correct)'}], correct:'d' },
+  { id:-5, prompt:'QUESTION 5: THIS IS A TEST. THE ANSWER IS A',
+    options:[{key:'a',text:'Answer A (correct)'},{key:'b',text:'Answer B'},{key:'c',text:'Answer C'},{key:'d',text:'Answer D'}], correct:'a' },
+  { id:-6, prompt:'QUESTION 6: THIS IS A TEST. THE ANSWER IS B',
+    options:[{key:'a',text:'Answer A'},{key:'b',text:'Answer B (correct)'},{key:'c',text:'Answer C'},{key:'d',text:'Answer D'}], correct:'b' },
+];
+let localQIdx = 0;
+
+async function getQuestion(){
+  if (FORCE_LOCAL_QUESTIONS){
+    const q = LOCAL_Q[localQIdx % LOCAL_Q.length]; localQIdx++; return q;  // cycle 1..6 in order
+  }
+  try{
+    const r = await fetch(API_BASE+'getQuestions?n=1');
+    if (r.ok){ const d = await r.json(); if (d.questions && d.questions[0]) return d.questions[0]; }
+  }catch(e){}
+  return LOCAL_Q[Math.floor(Math.random()*LOCAL_Q.length)];   // offline fallback
+}
+async function checkAnswerRemote(q, key){
+  if (q && q.id > 0){
+    try{
+      const r = await fetch(API_BASE+'checkAnswer', { method:'POST',
+        headers:{'Content-Type':'application/json'}, body:JSON.stringify({ id:q.id, choice:key }) });
+      if (r.ok){ const d = await r.json(); return { correct:!!d.correct, correct_option:d.correct_option||'' }; }
+    }catch(e){}
+  }
+  // Same shape as checkCoinRemote. It used to return a bare boolean, which
+  // threw away the correct_option the endpoint already sends — that is why a
+  // missed Brain Freeze never showed the right answer while a missed coin did.
+  return { correct: (q && q.correct ? key === q.correct : false),
+           correct_option: (q && q.correct) || '' };   // offline fallback
+}
+
+function applyFreeze(){ freezeUntil = performance.now() + FREEZE_MS; startFreezeAudio(); }
+function isFrozen(){ return performance.now() < freezeUntil; }
+
+/* add a fresh DORC row right below the current stack (wrong-answer penalty) */
+function addBottomRow(){
+  let L = -1;
+  for (let r=0;r<grid.length;r++){ if (grid[r] && grid[r].some(x=>x)) L = r; }
+  const r = L + 1; ensureRow(r);
+  for (let c=0;c<rowLen(r);c++) grid[r][c] = makeCell(randColorIdx());
+}
+
+function hitQuestion(r,c){
+  grid[r][c] = null;        // consume the power bubble
+  ball = null;              // consume the shot
+  const dropped = dropFloaters();
+  if (dropped) addScore(dropped*20);
+  openQuestion();
+}
+
+function splitPrompt(p){
+  // last '?'-terminated sentence = the question; everything before = context
+  const m = String(p).match(/^([\s\S]*?)([^.?!]*\?)\s*$/);
+  if (m && m[1].trim()) return { ctx: m[1].trim(), ask: m[2].trim() };
+  return { ctx: '', ask: String(p).trim() };
+}
+function renderPrompt(el, ctx, ask){
+  if (!ask){ const s = splitPrompt(ctx); ctx = s.ctx; ask = s.ask; }  // fallback for local test questions
+  el.textContent = '';
+  if (ctx){
+    const c = document.createElement('span'); c.className = 'qctx';
+    c.textContent = ctx; el.appendChild(c);
+  }
+  const a = document.createElement('span'); a.className = 'qask';
+  a.textContent = ask; el.appendChild(a);
+}
+
+function blockDims(el){
+  let top = Infinity, bot = 0, w = 0;
+  for (const c of el.children){
+    top = Math.min(top, c.offsetTop);
+    bot = Math.max(bot, c.offsetTop + c.offsetHeight);
+    w = Math.max(w, c.offsetWidth);
+  }
+  return el.children.length ? { w, h: bot - top } : { w: 0, h: 0 };
+}
+
+/* Methodology Madness answers: keep each on ONE line by shrinking the font,
+   rather than letting a single trailing word wrap and knock the 2x2 grid out
+   of alignment.
+
+   Floors at MIN and then gives up gracefully — if an answer is so long it
+   cannot fit even at the minimum, wrapping is restored, because an unreadably
+   small answer is worse than an untidy one. Reads the CSS size as the starting
+   point so restyling .opt does not silently break this. */
+function fitOptOneLine(el, tries){
+  const MIN = 12;
+  tries = tries || 0;
+
+  // If the element is not laid out yet, scrollWidth and clientWidth are BOTH
+  // zero — and 0 > 0 is false, so the shrink loop never runs, the wrap-restore
+  // check never fires, and nowrap is left on a long answer with no overflow
+  // set. It then spills straight out the side of the card. That is exactly the
+  // bug this guard exists to stop: never measure a box that has no width, and
+  // never leave nowrap behind on one.
+  if (!el.clientWidth){
+    el.style.whiteSpace = '';                       // wrap normally in the meantime
+    if (tries < 10) requestAnimationFrame(() => fitOptOneLine(el, tries + 1));
+    return;
+  }
+
+  const base = parseFloat(getComputedStyle(el).fontSize) || 18;
+  el.style.whiteSpace = 'nowrap';
+  let s = base;
+  el.style.fontSize = s + 'px';
+  while (s > MIN && el.scrollWidth > el.clientWidth){
+    s -= 1;
+    el.style.fontSize = s + 'px';
+  }
+  if (el.scrollWidth > el.clientWidth){      // still too long at MIN
+    el.style.whiteSpace = '';                // let it wrap; readable beats tidy
+    el.style.fontSize = '';                  // and give the size back too
+  }
+}
+
+function fitPromptFont(box, txt, base, min){
+  // shrink font until text fits the fixed-height box (overflow:hidden clips otherwise)
+  let s = base; txt.style.fontSize = s + 'px';
+  while (s > min && box.scrollHeight > box.clientHeight){ s -= 2; txt.style.fontSize = s + 'px'; }
+  return s;
+}
+
+async function openQuestion(){
+  paused = true;
+  const quiz = document.getElementById('quiz');
+  document.getElementById('qResult').textContent = '';
+  document.getElementById('qPrompt').style.fontSize = '';
+  document.getElementById('qPrompt').textContent = 'Loading question\u2026';
+  document.getElementById('qOpts').innerHTML = '';
+  quiz.style.display = 'flex';
+  curQ = await getQuestion();
+  const qp = document.getElementById('qPrompt');
+  qp.textContent = curQ.prompt;
+  fitPromptFont(qp, qp, 46, 20);
+  const opts = document.getElementById('qOpts'); opts.innerHTML = '';
+  curQ.options.forEach(o => {
+    const b = document.createElement('div'); b.className = 'opt';
+    b.dataset.key = o.key;                 // flashCorrect() finds the row by this
+    b.innerHTML = `<b>${o.key.toUpperCase()}</b>${o.text}`;
+    b.onclick = () => answerQuestion(o.key, b);
+    opts.appendChild(b);
+  });
+}
+/* Missing a Brain Freeze used to end at "WRONG \u2014 DORCS INCOMING", which told
+   the player nothing. Now the right answer lights up while a game-show losing
+   horn plays over it \u2014 four descending stabs and a long sagging note, the
+   doo-doo-doo-doo bahhhh figure.
+
+   Synthesized, not a clip: no new asset, nothing added to a preload already
+   near 25MB, and every note is tunable right here.
+
+   The whole phrase is SCHEDULED ON THE AUDIOCONTEXT IN ONE GO rather than
+   fired from a chain of setTimeouts, so the notes stay in time with each
+   other even if the main thread stutters mid-frame. The flashes ride the same
+   millisecond table, so they cannot drift out of sync with what you hear. */
+// The real figure is a CHROMATIC WALK DOWN -- D, C#, C, B, each a semitone
+// below the last. Published transcriptions put it just above middle C (D4).
+// These are those notes dropped an octave and then a further three
+// semitones, which is where Travis tuned it by ear: B2, Bb2, A2, then Ab2
+// held and sagging. Low enough to read as a horn rather than a beep.
+const HORN_NOTES = [123.47, 116.54, 109.99];   // B2  Bb2  A2  -- the stabs
+const HORN_START_MS = 320;     // beat between the wrong click and the first stab
+const HORN_NOTE_MS  = 280;     // length of each short stab
+const HORN_PAUSE_MS = 360;     // the breath before the last note
+const HORN_TAIL_MS  = 1950;    // the long "bahhhh"
+const HORN_TAIL_HZ  = 103.83;  // Ab2 -- the fourth note of the figure...
+const HORN_TAIL_END = 46.25;   // ...sagging most of an octave and a half
+const QUIZ_HOLD_MS  = 1150;    // silence AFTER the horn, before play resumes
+const QUIZ_CLOSE_MS = 1000;    // a correct answer stays snappy
+
+/* MIX NOTES -- why the numbers below are what they are.
+
+   HORN_GAIN is the level of a WHOLE note, not of one oscillator. The two
+   detuned saws share a single gain node; giving each its own (the first
+   cut did) means they sum to roughly double, and the horn arrived about
+   twice as hot as every other sound in the game.
+
+   It sits UNDER blip()'s 0.22 rather than at it. A blip is a click; this
+   is a two-and-a-half second sustained phrase, and the ear integrates
+   sustained sound as louder than a transient at the same peak. Matching
+   the numbers would not match the loudness.
+
+   The music ducks instead. Making room is what stops it feeling
+   overbearing -- the alternative is turning the horn up until it wins,
+   which is how a mix gets loud and tiring. Same musicDuck the freeze
+   power-up uses, so the two can never fight for the music channel.
+
+   HORN_HP_HZ trims everything under the lowest note. Sub-bass that no
+   laptop or phone can reproduce still costs headroom and can rattle a
+   small speaker, so removing it makes the audible part cleaner and leaves
+   what you actually hear unchanged.
+
+   The 1700Hz lowpass stays exactly where it was tuned. At these pitches
+   the harmonics are what carry the phrase on small speakers -- the
+   fundamental of the sag (46Hz) is below what a phone can produce at all,
+   and the note still reads, because the ear reconstructs it from them. */
+const HORN_GAIN  = 0.105;   // per NOTE, both oscillators together
+const HORN_DUCK  = 0.18;    // music drops to this while the horn plays
+const HORN_HP_HZ = 40;      // below the 46Hz sag, so it only trims sub-bass
+
+/* Live oscillators, so an abandoned run can cut the horn off mid-phrase —
+   scheduled audio ignores DOM guards, it has to be stopped by hand. */
+let hornNodes = [], hornUnduck = null;
+
+function hornDuckMusic(on){
+  // Guard: the freeze power-up owns musicDuck too. A wrong answer never
+  // starts a freeze, so they cannot overlap in practice, but restoring
+  // blindly would stomp it if that ever changed.
+  if (on){ musicDuck = HORN_DUCK; applyMusicGain(0.18); }
+  else if (musicDuck === HORN_DUCK){ musicDuck = 1; applyMusicGain(0.7); }
+}
+
+function stopHorn(){
+  for (const n of hornNodes){ try { n.stop(); } catch (e) {} }
+  hornNodes = [];
+  if (hornUnduck){ clearTimeout(hornUnduck); hornUnduck = null; }
+  hornDuckMusic(false);
+}
+
+/* One brass-ish note: two detuned saws beating against each other through a
+   shared lowpass, so it reads as an instrument rather than a test tone.
+   bendTo slides the pitch down for the final held note. */
+function hornNote(c, at, freq, dur, bendTo){
+  const vol = HORN_GAIN * AUDIO.sfxVol;
+  const g = c.createGain(), lp = c.createBiquadFilter(), hp = c.createBiquadFilter();
+  lp.type = 'lowpass';  lp.frequency.value = 1700;
+  hp.type = 'highpass'; hp.frequency.value = HORN_HP_HZ;
+  lp.connect(hp); hp.connect(g); g.connect(c.destination);
+  // one envelope for the note, both voices inside it
+  // (exponential ramps cannot touch zero, hence the 0.0001 floor)
+  g.gain.setValueAtTime(0.0001, at);
+  g.gain.exponentialRampToValueAtTime(vol, at + 0.045);
+  g.gain.setValueAtTime(vol, Math.max(at + 0.05, at + dur - 0.12));
+  g.gain.exponentialRampToValueAtTime(0.0001, at + dur);
+  for (const detune of [-6, 6]){
+    const o = c.createOscillator();
+    o.type = 'sawtooth'; o.detune.value = detune;
+    o.frequency.setValueAtTime(freq, at);
+    if (bendTo) o.frequency.exponentialRampToValueAtTime(bendTo, at + dur * 0.92);
+    o.connect(lp);
+    o.start(at); o.stop(at + dur + 0.03);
+    hornNodes.push(o);
+  }
+}
+
+function loserHorn(){
+  const c = ac(); if (!c || AUDIO.sfxVol <= 0) return;
+  if (c.state === 'suspended') c.resume().catch(()=>{});
+  try {
+    stopHorn();
+    hornDuckMusic(true);
+    const t0 = c.currentTime + HORN_START_MS / 1000;
+    HORN_NOTES.forEach((f, i) =>
+      hornNote(c, t0 + i * HORN_NOTE_MS / 1000, f, (HORN_NOTE_MS / 1000) * 0.88));
+    const tailAt = t0 + (HORN_NOTES.length * HORN_NOTE_MS + HORN_PAUSE_MS) / 1000;
+    hornNote(c, tailAt, HORN_TAIL_HZ, HORN_TAIL_MS / 1000, HORN_TAIL_END);
+    // bring the music back as the last note dies, not after the card closes
+    const phraseMs = HORN_START_MS + HORN_NOTES.length * HORN_NOTE_MS
+                   + HORN_PAUSE_MS + HORN_TAIL_MS;
+    hornUnduck = setTimeout(() => { hornUnduck = null; hornDuckMusic(false); },
+                            phraseMs - 250);
+  } catch (e) { hornDuckMusic(false); }
+}
+
+function flashCorrect(letter){
+  const phrase = HORN_START_MS + HORN_NOTES.length * HORN_NOTE_MS + HORN_PAUSE_MS + HORN_TAIL_MS;
+  const hit = letter ? document.querySelector('#quiz .opt[data-key="' + letter + '"]') : null;
+  loserHorn();                       // plays whether or not the row was found
+  if (!hit) return phrase + QUIZ_HOLD_MS;
+  HORN_NOTES.forEach((_, i) => {
+    setTimeout(() => {
+      // Abandoning the run (BLITZ_ABANDON from the room) closes the card while
+      // flashes are still queued; stopHorn() handles the audio side.
+      if (document.getElementById('quiz').style.display === 'none') return;
+      hit.classList.add('correct');
+      if (i < HORN_NOTES.length - 1){
+        setTimeout(() => hit.classList.remove('correct'), HORN_NOTE_MS * 0.55);
+      }
+    }, HORN_START_MS + i * HORN_NOTE_MS);
+  });
+  // the answer stays lit under the long note, then a beat of silence
+  return phrase + QUIZ_HOLD_MS;
+}
+
+async function answerQuestion(key, el){
+  if (answering) return; answering = true;
+  qAtt++;
+  const verdict = await checkAnswerRemote(curQ, key);
+  const ok = verdict.correct;
+  const res = document.getElementById('qResult');
+  document.querySelectorAll('#quiz .opt').forEach(o => o.style.pointerEvents = 'none');
+  let pendingFreeze = false;
+  let closeIn = QUIZ_CLOSE_MS;
+  if (ok){
+    qCor++; el.classList.add('correct');
+    res.style.color = '#10CFC9'; res.textContent = 'CORRECT \u2014 DORCS FROZEN';
+    blip(660,0.12,'sine');
+    pendingFreeze = true;        // hold the freeze + quip + music fade until play resumes
+  } else {
+    el.classList.add('wrong');
+    res.style.color = '#B83131'; res.textContent = 'WRONG \u2014 DORCS INCOMING';
+    addBottomRow();          // the horn IS the wrong-answer sound now
+    // Only a miss holds the card open longer; a good run stays snappy.
+    closeIn = flashCorrect(verdict.correct_option);
+  }
+  setTimeout(() => {
+    document.getElementById('quiz').style.display = 'none';
+    paused = false; answering = false; curQ = null;
+    if (pendingFreeze) applyFreeze();   // fires exactly as gameplay resumes
+  }, closeIn);
+}
+
+/* ============================================================================
+   COACH KENT COIN  —  timed, scored power-up
+   Hitting a coin opens a 10s timer + methodology question.
+     right answer -> +round(COIN_MAX * timeLeftFraction)
+     wrong answer -> -round(COIN_MAX * timeLeftFraction)  (clamped at score 0)
+     let it expire -> 0
+   Faster = bigger swing in whichever direction. Counters reset each playthrough.
+   NOTE: questions are TEST placeholders — swap COIN_Q (or wire an endpoint) for
+   Coach Kent's real Qlik Sales Methodology content.
+   ============================================================================ */
+const COIN_TIME_MS = 10000;
+const COIN_MAX = 300;                  // max points at full clock (tunable)
+/* ---- Methodology Coin v2 tunables (future control-app settings) ---- */
+const COINS_TO_TRIGGER = 3;            // banked coins that fire Methodology Madness
+const BANK_ON_CORRECT_ONLY = true;     // wrong/timeout banks no coin
+const COIN_CATEGORIES = ['term','green_sheet','blue_sheet'];
+const CAT_LABEL = { term:'METHODOLOGY TERM', green_sheet:'GREEN SHEET', blue_sheet:'BLUE SHEET' };
+const ROULETTE_MS = 2200;              // category spin (floor; masks the fetch)
+const READ_SECONDS_MAX = 5;            // free read before the clock
+let coinsCollected = 0;                // pooled, in-memory, resets each playthrough
+let coinCat = 'term';                  // category the roulette landed on this round
+const COIN_Q = [
+  { prompt:'METHODOLOGY \u2014 TEST 1: THE ANSWER IS A', options:[{key:'a',text:'Answer A (correct)'},{key:'b',text:'Answer B'},{key:'c',text:'Answer C'},{key:'d',text:'Answer D'}], correct:'a' },
+  { prompt:'METHODOLOGY \u2014 TEST 2: THE ANSWER IS B', options:[{key:'a',text:'Answer A'},{key:'b',text:'Answer B (correct)'},{key:'c',text:'Answer C'},{key:'d',text:'Answer D'}], correct:'b' },
+  { prompt:'METHODOLOGY \u2014 TEST 3: THE ANSWER IS C', options:[{key:'a',text:'Answer A'},{key:'b',text:'Answer B'},{key:'c',text:'Answer C (correct)'},{key:'d',text:'Answer D'}], correct:'c' },
+  { prompt:'METHODOLOGY \u2014 TEST 4: THE ANSWER IS D', options:[{key:'a',text:'Answer A'},{key:'b',text:'Answer B'},{key:'c',text:'Answer C'},{key:'d',text:'Answer D (correct)'}], correct:'d' },
+];
+let coinQIdx = 0, coinQ = null, coinDeadline = 0, coinActive = false, coinAnswered = false, coinRAF = 0;
+function coinModalOpen(){ return document.getElementById('coin').style.display === 'flex'; }
+
+async function getCoinQuestion(category){
+  try{
+    const r = await fetch(API_BASE+'getCoinQuestions?category='+encodeURIComponent(category)+'&n=1');
+    if (r.ok){ const d = await r.json(); if (d.questions && d.questions[0]) return d.questions[0]; }
+  }catch(e){}
+  const q = COIN_Q[coinQIdx % COIN_Q.length]; coinQIdx++; return q;   // offline fallback
+}
+async function checkCoinRemote(q, key){
+  if (q && q.id > 0){
+    try{
+      const r = await fetch(API_BASE+'checkCoinAnswer', { method:'POST',
+        headers:{'Content-Type':'application/json'}, body:JSON.stringify({ id:q.id, choice:key }) });
+      if (r.ok){ const d = await r.json(); return { correct:!!d.correct, correct_option:d.correct_option||'', explanation:d.explanation||'' }; }
+    }catch(e){}
+  }
+  return { correct: (q && q.correct ? key===q.correct : false), correct_option: (q && q.correct) || '', explanation: (q && q.explanation) || '' };
+}
+
+function hitCoin(r,c){
+  grid[r][c] = null;        // consume the coin
+  ball = null;              // consume the shot
+  const dropped = dropFloaters();
+  if (dropped) addScore(dropped*20);
+  openCoin();
+}
+async function openCoin(){
+  paused = true; coinActive = true; coinAnswered = false;
+  const $ = id => document.getElementById(id);
+  $('coinResult').textContent = ''; $('coinWhy').textContent = '';
+  $('coinContinue').style.display = 'none';
+  document.querySelector('#coin .card').classList.remove('verdict');
+  const _p1 = $('coinPromptOne');
+  _p1.textContent = ''; _p1.style.fontSize = ''; _p1.style.transform = '';
+  $('coinPrompt').classList.remove('settled');
+  $('coinOpts').innerHTML = ''; $('coinOpts').classList.remove('show');
+  $('coinCountdown').classList.remove('show'); $('coinCountdown').textContent = '';
+  $('coinDivider').classList.remove('show');
+  $('coinTimerwrap').style.visibility = 'hidden';        // no clock during roulette/read
+  $('coinBar').style.width = '100%';
+  $('coinSecs').textContent = (COIN_TIME_MS/1000).toFixed(1);
+  $('coin').style.display = 'flex';
+
+  // 1) roll the real category, kick off the fetch, and spin the roulette over it
+  coinCat = COIN_CATEGORIES[Math.floor(Math.random()*COIN_CATEGORIES.length)];
+  const qPromise = getCoinQuestion(coinCat);
+  await rouletteSpin(coinCat);                            // floors at ROULETTE_MS
+  coinQ = await qPromise;                                 // ...but waits if fetch is slow
+  if (!coinActive) return;                                // closed/reset during fetch
+
+  // 2) READ phase — prompt loads BIG (fills its zone), holds, then settles up top
+  const cpBox = $('coinPrompt'), cpOne = $('coinPromptOne');
+  renderPrompt(cpOne, coinQ.prompt, coinQ.question);
+  let fs = 26; cpOne.style.fontSize = fs + 'px';       // fit for the 96px resting box
+  while (fs > 14 && blockDims(cpOne).h > 88){ fs -= 2; cpOne.style.fontSize = fs + 'px'; }
+  const d = blockDims(cpOne);                           // scale-up headroom for the read phase
+  const upK = Math.max(1, Math.min(1.6, (cpOne.clientWidth - 24) / (d.w || 1), 184 / (d.h || 1)));
+  cpOne.style.transition = 'none';                      // arrive already scaled, no entry animation
+  cpOne.style.transform = 'scale(' + upK.toFixed(3) + ')';
+  void cpOne.offsetHeight;
+  cpOne.style.transition = '';
+  const readSec = Math.min(READ_SECONDS_MAX, Math.max(1, Number(coinQ.read_seconds) || READ_SECONDS_MAX));
+  await wait(readSec*1000);
+  if (!coinActive) return;
+  cpBox.classList.add('settled');                 // box eases to resting height
+  cpOne.style.transform = 'scale(1)';             // same block, same line breaks, just settles
+  await wait(600);                                        // let the shrink play
+  if (!coinActive) return;
+  $('coinDivider').classList.add('show');                // divider wipes out
+  await wait(450);
+  if (!coinActive) return;
+
+  // 3) 3-2-1 countdown in the shared bottom zone
+  $('coinCountdown').classList.add('show');
+  await coinCountdown();
+  if (!coinActive) return;
+
+  // 4) cross-fade: countdown out, answers into the SAME zone + the point clock starts
+  const opts = $('coinOpts'); opts.innerHTML = '';
+  coinQ.options.forEach(o => {
+    const b = document.createElement('div'); b.className = 'opt'; b.dataset.key = o.key;
+    b.innerHTML = `<b>${o.key.toUpperCase()}</b>${o.text}`;
+    b.onclick = () => coinAnswer(o.key, b);
+    opts.appendChild(b);
+  });
+  // A long answer used to wrap with one orphaned word on a second line, which
+  // made the 2x2 grid look broken. Shrink each answer until it fits on one
+  // line instead. Measured after append, because scrollWidth needs layout.
+  opts.querySelectorAll('.opt').forEach(fitOptOneLine);
+  $('coinCountdown').classList.remove('show');
+  opts.classList.add('show');
+  $('coinTimerwrap').style.visibility = 'visible';
+  coinDeadline = performance.now() + COIN_TIME_MS;        // clock starts only now
+  blip(880,0.06,'square');
+  coinTick();
+}
+
+function wait(ms){ return new Promise(r => setTimeout(r, ms)); }
+
+/* Methodology category reel — a vertical Price-Is-Right wheel. Panels scroll
+   DOWNWARD (enter top, exit bottom), decelerating with a ratchet tick that
+   slows as it lands the chosen category in the center window. ~3s of drama;
+   the caller awaits the question fetch separately so the spin masks it. */
+const REEL_CELL = 44;                    // px per category panel (matches CSS)
+const REEL_SPIN_MS = 3000;
+function rouletteSpin(landed){
+  return new Promise(resolve => {
+    const win = document.getElementById('coinReel');
+    const strip = document.getElementById('coinReelStrip');
+    if (!strip){ resolve(); return; }
+    win.classList.remove('landed');
+
+    // Build a long strip: many repeats of the 3 categories so it reads as a full wheel.
+    // Order is fixed (term, green, blue) repeating; we land by scrolling to a chosen index.
+    const REPEATS = 24;
+    const seq = [];
+    for (let i=0;i<REPEATS;i++) for (const c of COIN_CATEGORIES) seq.push(c);
+    strip.innerHTML = seq.map(c=>`<div class="reel-cell c-${c}">${CAT_LABEL[c]}</div>`).join('');
+
+    // Center window is the band at top:44px..88px -> a cell is centered when its top
+    // sits at 44px, i.e. translateY = 44 - index*REEL_CELL.
+    const landedPos = COIN_CATEGORIES.indexOf(landed);   // 0..2
+    // pick a target cell near the end of the strip on the landed category
+    const targetIdx = (REPEATS-3)*COIN_CATEGORIES.length + landedPos;
+    const endY = 44 - targetIdx*REEL_CELL;
+    const startY = 44 - (COIN_CATEGORIES.length)*REEL_CELL;   // start a few cells in
+    const totalDist = startY - endY;                          // positive (scrolling down = increasing translateY toward endY which is more negative... )
+
+    const t0 = performance.now();
+    let lastCellPassed = -1;
+    function easeOutQuart(p){ return 1 - Math.pow(1-p, 4); }   // strong decel for the ratchet feel
+
+    (function step(now){
+      if (!coinActive){ resolve(); return; }
+      const p = Math.min(1, (now - t0)/REEL_SPIN_MS);
+      const e = easeOutQuart(p);
+      const yy = startY + (endY - startY)*e;
+      strip.style.transform = `translateY(${yy}px)`;
+
+      // ratchet tick each time a cell boundary crosses the center — spacing widens as it slows
+      const cellsScrolled = Math.floor((44 - yy)/REEL_CELL);
+      if (cellsScrolled !== lastCellPassed){
+        lastCellPassed = cellsScrolled;
+        // tick pitch rises slightly as it slows, like the PIR wheel ratchet
+        blip(300 + p*260, 0.025, 'square');
+      }
+      if (p < 1){ requestAnimationFrame(step); }
+      else {
+        strip.style.transform = `translateY(${endY}px)`;
+        win.classList.add('landed');
+        blip(880,0.10,'sine'); setTimeout(()=>blip(1175,0.12,'sine'),90);   // landing chime
+        resolve();
+      }
+    })(t0);
+  });
+}
+
+/* 3-2-1 big-number countdown overlay */
+function coinCountdown(){
+  return new Promise(resolve => {
+    const el = document.getElementById('coinCountdown');
+    let n = 3;
+    const tick = () => {
+      if (!coinActive){ resolve(); return; }
+      if (n === 0){ resolve(); return; }
+      el.innerHTML = `<span class="cdnum">${n}</span>`;
+      blip(440+(3-n)*160,0.1,'square');
+      n--; setTimeout(tick, 900);
+    };
+    tick();
+  });
+}
+function coinTick(){
+  if (!coinActive) return;
+  const left = Math.max(0, coinDeadline - performance.now());
+  const f = left / COIN_TIME_MS;
+  document.getElementById('coinBar').style.width = (f*100).toFixed(1) + '%';
+  document.getElementById('coinSecs').textContent = (left/1000).toFixed(1);
+  if (left <= 0){ coinTimeout(); return; }
+  coinRAF = requestAnimationFrame(coinTick);
+}
+async function coinAnswer(key, el){
+  if (coinAnswered) return; coinAnswered = true; coinActive = false;
+  cancelAnimationFrame(coinRAF);
+  const left = Math.max(0, coinDeadline - performance.now());   // capture BEFORE the network call
+  const f = left / COIN_TIME_MS;
+  document.querySelectorAll('#coin .opt').forEach(o => o.style.pointerEvents = 'none');
+  const verdict = await checkCoinRemote(coinQ, key);
+  const ok = verdict.correct;
+  cAtt++; if (ok) cCor++;
+  if (ok && BANK_ON_CORRECT_ONLY) coinsCollected++;       // bank a coin only on correct
+  const pts = Math.round(COIN_MAX * f) * (ok ? 1 : -1);
+  addScore(pts);
+  el.classList.add(ok ? 'correct' : 'wrong');
+  const res = document.getElementById('coinResult');
+  res.style.color = ok ? '#10CFC9' : '#FF2D9B';
+  const banked = ok ? `   COIN ${Math.min(coinsCollected,COINS_TO_TRIGGER)}/${COINS_TO_TRIGGER}` : '';
+  res.textContent = (pts>=0 ? '+' : '') + pts.toLocaleString() + (ok ? '  NICE!' : '  OUCH!') + banked;
+  if (!ok && verdict.correct_option){
+    const hit = document.querySelector('#coin .opt[data-key="' + verdict.correct_option + '"]');
+    if (hit) hit.classList.add('correct');               // reveal the right answer
+  }
+  if (verdict.explanation) document.getElementById('coinWhy').textContent = verdict.explanation;
+  ok ? coinJingle() : blip(140,0.2,'sawtooth');
+  document.getElementById('coinContinue').style.display = 'inline-block';  // player closes when ready
+  document.querySelector('#coin .card').classList.add('verdict');          // compact: reclaim reserved space
+}
+function coinTimeout(){
+  if (coinAnswered) return; coinAnswered = true; coinActive = false;
+  const res = document.getElementById('coinResult');
+  res.style.color = '#9fb4d0'; res.textContent = 'TIME!  +0';
+  setTimeout(closeCoin, 1200);
+}
+function closeCoin(){
+  cancelAnimationFrame(coinRAF);
+  document.getElementById('coin').style.display = 'none';
+  coinActive = false; coinAnswered = false; coinQ = null; paused = false;
+  if (coinsCollected >= COINS_TO_TRIGGER) triggerMadness();   // collect-5 -> Methodology Madness
+}
+
+/* PASS A STUB. Pass B replaces this with: spin the Madness wheel (weighted 1-5)
+   -> grant that many glitch balls -> enter the Madness state. For now it just
+   resets the pooled counter and flashes, so the collect-5 loop is testable. */
+function triggerMadness(){
+  coinsCollected = 0;
+  try { flash = 1; } catch(e){}            // existing white-flash hook
+  blip(990,0.18,'sine'); setTimeout(()=>blip(1320,0.22,'sine'), 140);
+  console.log('[Madness] collect-5 reached — wheel + glitch balls land in Pass B');
+}
+function resetCoin(){
+  cancelAnimationFrame(coinRAF);
+  coinActive = false; coinAnswered = false; coinQ = null;
+  document.getElementById('coin').style.display = 'none';
+}
+
+/* ============================================================================
+   BRAIN BLAST  —  meter fills as DORCs are knocked down; full meter lets the
+   player click a HUD button to enter a 3-question glossary scene (10s each, no
+   feedback until a BAM-BAM-BAM reveal). All 3 right -> wipe the lowest 3 rows
+   at half points. Any miss/timeout -> no wipe. Either way a 20s cooldown.
+   Hazard zone bleeds the meter. Freeze pops + special tokens don't count.
+   Questions generated client-side from the scraped Qlik glossary.
+   ============================================================================ */
+const BB_TARGET=50, BB_DRAIN=0.8, BB_COOLDOWN_MS=20000, BB_Q_TIME_MS=10000, BB_WIPE_ROWS=3, BB_POINT_SCALE=0.5;
+let bbMeter=0, bbCooldown=0, bbState='idle';   // 'idle' | 'scene' | 'reveal'
+let bbQs=null, bbQi=0, bbResults=[], bbDeadline=0, bbRAF=0, bbAnswered=false;
+const BB_FALLBACK=[
+  {term:'Associative Engine', def:'An in-memory engine that lets users explore data freely across all fields without pre-built queries.'},
+  {term:'Active Intelligence', def:'Continuous intelligence where up-to-date data triggers immediate, informed action.'},
+  {term:'Data Fabric', def:'An architecture that connects and manages data across sources to deliver it where needed.'},
+  {term:'Embedded Analytics', def:'Analytics integrated directly into the applications people already use.'},
+  {term:'Data Literacy', def:'The ability to read, work with, analyze, and communicate with data.'},
+  {term:'Augmented Analytics', def:'Use of AI and machine learning to assist data prep, insight discovery, and explanation.'},
+];
+
+function bbReady(){ return bbState==='idle' && bbCooldown<=0 && bbMeter>=BB_TARGET; }
+let bbWasReady=false, bbDingTimer=0;
+function bbAdd(n){           // count DORCs toward the meter (normal play only)
+  if (bbState!=='idle' || bbCooldown>0 || isFrozen()) return;
+  const before = bbMeter>=BB_TARGET;
+  bbMeter = Math.min(BB_TARGET, bbMeter + n);
+  if (!before && bbMeter>=BB_TARGET){          // just hit READY — peppy ding burst (not a strobe)
+    bbWasReady=true;
+    let k=0; blastDing();
+    if (bbDingTimer) clearInterval(bbDingTimer);
+    bbDingTimer = setInterval(()=>{ k++; if(k>=3 || !bbReady()){ clearInterval(bbDingTimer); bbDingTimer=0; return; } blastDing(); }, 1000);
+  }
+}
+function bbUpdate(dt){
+  if (bbCooldown>0) bbCooldown = Math.max(0, bbCooldown - dt*1000);
+  if (HZ.inZone && bbState==='idle' && bbCooldown<=0) bbMeter = Math.max(0, bbMeter - BB_DRAIN*dt);  // hazard bleeds it
+}
+function resetBlast(){
+  cancelAnimationFrame(bbRAF);
+  bbState='idle'; bbMeter=0; bbCooldown=0; bbQs=null; bbResults=[]; bbAnswered=false;
+  document.getElementById('blast').style.display='none';
+}
+
+function bbShuffle(a){ for(let i=a.length-1;i>0;i--){ const j=Math.floor(Math.random()*(i+1)); [a[i],a[j]]=[a[j],a[i]]; } return a; }
+
+async function getBlastQuestions(){
+  try{
+    const r=await fetch(API_BASE+'getTerms?n=3');
+    if(r.ok){ const d=await r.json(); if(d.questions && d.questions.length===3) return d.questions; }  // [{id,def,options[]}]
+  }catch(e){}
+  return buildLocalBlast();   // offline fallback
+}
+function buildLocalBlast(){
+  const picks=bbShuffle([...BB_FALLBACK]).slice(0,3);
+  return picks.map(ans=>{
+    const used=new Set([ans.term]), decoys=[]; let guard=0;
+    while(decoys.length<3 && guard++<200){ const t=BB_FALLBACK[Math.floor(Math.random()*BB_FALLBACK.length)]; if(!used.has(t.term)){ used.add(t.term); decoys.push(t.term); } }
+    return { id:null, def:ans.def, options:bbShuffle([ans.term,...decoys]), _answer:ans.term };  // _answer => local check
+  });
+}
+async function checkTermRemote(q, choice){
+  if (q._answer != null){                                   // local fallback question
+    return { correct: choice===q._answer, term:q._answer };
+  }
+  try{
+    const r=await fetch(API_BASE+'checkTerm',{ method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({ id:q.id, choice }) });
+    if(r.ok){ const d=await r.json(); return { correct:!!d.correct, term:d.term||'' }; }
+  }catch(e){}
+  return { correct:false, term:'' };                        // unverifiable -> miss
+}
+
+async function startBlast(){
+  if (!bbReady()) return;
+  bbState='scene'; paused=true; setMenuMuffle(true);
+  bbQs=await getBlastQuestions(); bbQi=0; bbResults=[];
+  if (!bbQs || bbState!=='scene'){ closeBlast(); return; }
+  document.getElementById('blast').style.display='flex';
+  showBlastQuestion();
+}
+function showBlastQuestion(){
+  bbAnswered=false;
+  const q=bbQs[bbQi];
+  document.getElementById('bbReveal').style.display='none';
+  document.getElementById('bbQwrap').style.display='block';
+  document.getElementById('bbCount').textContent=`QUESTION ${bbQi+1} / 3`;
+  document.getElementById('bbDef').textContent=q.def;
+  const opts=document.getElementById('bbOpts'); opts.innerHTML='';
+  q.options.forEach(term=>{ const b=document.createElement('div'); b.className='opt'; b.textContent=term; b.onclick=()=>blastAnswer(term,b); opts.appendChild(b); });
+  bbDeadline=performance.now()+BB_Q_TIME_MS;
+  bbTick();
+}
+function bbTick(){
+  if (bbState!=='scene') return;
+  const left=Math.max(0,bbDeadline-performance.now());
+  document.getElementById('bbBar').style.width=(left/BB_Q_TIME_MS*100).toFixed(1)+'%';
+  document.getElementById('bbSecs').textContent=(left/1000).toFixed(1);
+  if (left<=0){ blastAnswer(null,null); return; }   // timeout -> auto miss
+  bbRAF=requestAnimationFrame(bbTick);
+}
+async function blastAnswer(choice, el){
+  if (bbAnswered) return; bbAnswered=true;
+  cancelAnimationFrame(bbRAF);
+  if (el){ el.classList.add('picked'); }                  // lock choice, NO right/wrong tell yet
+  document.querySelectorAll('#blast .opt').forEach(x=>x.style.pointerEvents='none');
+  blip(520,0.05,'square');
+  const q=bbQs[bbQi];
+  const verdict = await checkTermRemote(q, choice || '');  // '' on timeout
+  tAtt++; if (verdict.correct) tCor++;
+  bbResults.push({ correct:verdict.correct, term:verdict.term });
+  setTimeout(()=>{ bbQi++; (bbQi<3) ? showBlastQuestion() : blastReveal(); }, 450);
+}
+function blastReveal(){
+  bbState='reveal';
+  document.getElementById('bbQwrap').style.display='none';
+  document.getElementById('bbReveal').style.display='block';
+  const cards=document.getElementById('bbCards'); cards.innerHTML='';
+  document.getElementById('bbOutcome').textContent='';
+  const els=bbResults.map(()=>{ const d=document.createElement('div'); d.className='bbcard'; d.textContent='?'; cards.appendChild(d); return d; });
+  bbResults.forEach((res,i)=>{                              // BAM BAM BAM
+    setTimeout(()=>{
+      const ok=res.correct;
+      els[i].classList.add(ok?'hit':'miss','pop');
+      // U+FE0E is the TEXT variation selector. Without it iOS renders U+2714
+      // with the emoji font \u2014 a fixed dark-grey glyph that ignores `color`
+      // entirely, which is why the tick came out grey instead of taking the
+      // .hit mint. FE0E forces the monochrome text glyph, which the CSS can
+      // then colour. Same for the cross.
+      els[i].textContent = ok ? '\u2714\ufe0e' : '\u2718\ufe0e';
+      blip(ok?720:150, 0.14, ok?'sine':'sawtooth');
+    }, 450 + i*560);
+  });
+  setTimeout(()=>finishBlast(bbResults.every(r=>r.correct)), 450 + 3*560 + 450);
+}
+function finishBlast(allRight){
+  const out=document.getElementById('bbOutcome');
+  if (allRight){
+    const cleared=wipeBottomRows(BB_WIPE_ROWS);
+    const pts=Math.round(cleared*10*BB_POINT_SCALE);       // half of normal pop value
+    addScore(pts);
+    out.style.color='#7CFFB0'; out.textContent=`ALL CLEAR!  ${cleared} DORCS WIPED  +${pts.toLocaleString()}`;
+    blip(880,0.22,'sine');
+  } else {
+    out.style.color='#FF6B6B'; out.textContent='MISSED IT \u2014 COOLING DOWN';
+    blip(120,0.3,'sawtooth');
+  }
+  setTimeout(closeBlast, 1900);
+}
+function closeBlast(){
+  document.getElementById('blast').style.display='none';
+  bbState='idle'; paused=false; setMenuMuffle(false);
+  bbMeter=0; bbCooldown=BB_COOLDOWN_MS; bbQs=null; bbResults=[]; bbWasReady=false;
+  if(bbDingTimer){ clearInterval(bbDingTimer); bbDingTimer=0; }   // always cooldown, win or lose
+}
+function wipeBottomRows(n){
+  const rows=[];
+  for (let r=grid.length-1; r>=0 && rows.length<n; r--){
+    let has=false;
+    for (let c=0;c<grid[r].length;c++){ const cell=grid[r][c]; if (cell && cell.color>=0){ has=true; break; } }
+    if (has) rows.push(r);
+  }
+  let cleared=0;
+  for (const r of rows){
+    for (let c=0;c<grid[r].length;c++){
+      const cell=grid[r][c];
+      if (cell && cell.color>=0){ spawnFalling(r,c,cell); grid[r][c]=null; cleared++; }   // DORCs flee
+    }
+  }
+  dropFloaters();   // tidy up anything left hanging (no points, no meter credit)
+  return cleared;
+}
+
+/* ---- canvas ---- */
+const cv = document.getElementById('game');
+const ctx = cv.getContext('2d');
+const W = 1280, H = 720;
+
+/* ---- MOBILE RENDER BUDGET -------------------------------------------------
+   W and H above are the LOGICAL coordinate system and every draw call in this
+   file uses them. They are not the canvas backing store, which is what the GPU
+   actually fills. On a landscape phone the frame is displayed at roughly
+   683x390, so a 1280x720 backing store was doing 3.5x more pixel work than the
+   screen could ever show.
+
+   Shrinking the backing store and scaling the context once leaves every
+   coordinate in the game untouched. Input is safe too: frameToInternal maps
+   through cv.getBoundingClientRect(), which reports CSS size, not backing size.
+
+   0.7 still oversamples a phone (896 backing across ~683 displayed), so it
+   costs no visible sharpness while halving the fill cost. Desktop is untouched. */
+const LOWFX = (window.matchMedia && window.matchMedia('(pointer:coarse)').matches) ||
+              ('ontouchstart' in window && Math.min(screen.width, screen.height) <= 820);
+const RES = LOWFX ? 0.7 : 1;
+if (RES !== 1){
+  cv.width  = Math.round(W * RES);
+  cv.height = Math.round(H * RES);
+  ctx.scale(RES, RES);                 // set once; nothing in this file resets the transform
+  ctx.imageSmoothingQuality = 'low';   // the sprite sheets downscale 256 -> ~64 every frame
+}
+
+/* ---- board geometry (hex) ---- */
+const HUD_H     = 108;                 // bottom HUD bar height (CSS #freezeVid bottom must match)
+const HUD_Y     = H - HUD_H;           // top edge of the bottom bar (~612)
+const R         = 32;                  // bubble radius
+const D         = R * 2;               // 64
+const COLS      = 14;                  // playfield columns (narrow, centered)
+const BOARD_W   = COLS * D;            // 896
+const BOARD_X0  = Math.round((W - BOARD_W) / 2);  // centered -> 192px side margins
+const ROW_H     = Math.round(R * Math.SQRT2 * 1.2247); // ~ R*1.732 -> 55
+const GRID_Y0   = 54;                  // top draw y of row 0
+const LAUNCH_X  = BOARD_X0 + (COLS * D) / 2;
+const LAUNCH_Y  = HUD_Y - 38;          // launcher just above the bar (~574)
+const DANGER_Y  = LAUNCH_Y - 52;       // end-game line dropped down -> more grid (~522)
+const BALL_R    = 22;                  // player ball drawn smaller than grid bubbles (~31)
+const BB_BTN    = { x:200, y:HUD_Y+33, w:340, h:42 };  // Brain Blast pill (equal-margin layout)
+
+/* ---- colors: locked DORC palette. {id, hex} ; sprite uses id ---- */
+const PALETTE = [
+  { id:'blue',   hex:'#225189' },
+  { id:'green',  hex:'#6CAE31' },
+  { id:'red',    hex:'#B83131' },
+  { id:'yellow', hex:'#B7A933' },
+  { id:'purple', hex:'#653F84' },
+  { id:'teal',   hex:'#47B19C' },   // unlock later
+  { id:'orange', hex:'#B75100' },   // unlock later
+  { id:'pink',   hex:'#B74A9A' },   // unlock later
+];
+let activeCount = 5;                  // colors live this session; derived from lifetime score
+/* Colors unlock by beating your TERRITORY high score (single best run), snapshotted
+   at game start so the bar is fixed for the run. As the current game score crosses
+   bar, bar+1000, bar+2000, the next D.O.R.C. color enters the board live. */
+const BASE_COLORS = 5, MAX_COLORS = PALETTE.length;  // 8
+const UNLOCK_FLOOR = 2000;            // bar when the territory has no score yet
+                                      // NOTE: only a fallback. getTerritoryHigh sends
+                                      // GREATEST(2000, high), so territoryHigh is never 0
+                                      // and the SERVER floor is what actually applies.
+                                      // Change both or you change nothing.
+const UNLOCK_STEPS = [0, 1000, 2000]; // teal at bar, orange at bar+1000, pink at bar+2000
+let unlockBar = UNLOCK_FLOOR;         // snapshotted at game start from territoryHigh
+let lastUnlockColors = 5;             // for the mid-game unlock toast (celebration pass)
+function colorsForScore(curScore){
+  let n = BASE_COLORS;
+  for (const step of UNLOCK_STEPS){ if (curScore >= unlockBar + step) n++; }
+  return Math.min(MAX_COLORS, n);
+}
+const ANIM_FPS = 18;                 // sprite-sheet playback rate (hybrid 8-bit feel)
+function activeColors(){ return PALETTE.slice(0, activeCount); }
+function randColorIdx(){ return Math.floor(Math.random() * activeCount); }
+
+/* ---- sprite sheets: all 3 emotions per color ---- */
+const SHEET_COLS = 8, SHEET_ROWS = 6, FRAMES = 48, CELL = 256;
+const EMOTIONS = ['grin','goof','scared'];
+/* ============================================================================
+   PRELOADER  —  pull every asset down up front behind a loading screen, so the
+   game never hitches mid-play (videos, music, voice all warm in cache).
+   Sprite images report via loadAllSheets; everything else via fetch.
+   ============================================================================ */
+const SPRITE_W = 7, SPRITE_COUNT = PALETTE.length * EMOTIONS.length;
+const PRELOAD = (() => {
+  const a = AUDIO.base, v = ASSET_BASE + 'ui/video/', list = [];
+  const add = (url,w)=>list.push({url,w});
+  add(v+'BlitzStartScreen.webm', 40);
+  add(v+'freeze_frame_overlay.webm', 40);
+  // all three: the session opens on a RANDOM one, so preloading only the
+  // first would leave a cold start two times out of three
+  MUSIC_TRACKS.forEach(function(f){ add(a+'music/'+f, 12); });
+  add(a+'other/power_up_fx/freeze/freeze_bg_10s.mp3', 2);
+  for (let i=1;i<=5;i++) add(a+`other/ball_fx/Ball_0${i}.mp3`, 1);
+  add(a+'other/ball_fx/Switch_01.mp3', 1);   // game-over sting (see gameOver)
+  for (let i=1;i<=DZONE_COUNT;i++) add(a+`alerts/danger_zone/d-zone${i}.mp3`, 1);
+  for (const n of ['-loop','-heartbeat']) add(a+`alerts/danger_zone/d-zone${n}.mp3`, 1);
+  for (let i=1;i<=MULTIPOP_COUNT;i++) add(a+`side-qlik/multi-pop/Side-Qlik${i}.mp3`, 1);
+  for (let i=1;i<=FREEZE_QUIP_COUNT;i++) add(a+`side-qlik/freeze-power-up/side-qlik-freeze-${i}.mp3`, 1);
+  return list;
+})();
+const preloadTotal = SPRITE_COUNT*SPRITE_W + PRELOAD.reduce((s,x)=>s+x.w, 0);
+let preloadDoneW = 0, preloadFinished = false;
+function preloadTick(w){
+  preloadDoneW += w;
+  const pct = Math.min(100, Math.round(preloadDoneW/preloadTotal*100));
+  const bar=document.getElementById('loadBar'), pc=document.getElementById('loadPct');
+  if (bar) bar.style.width = pct+'%';
+  if (pc) pc.textContent = 'LOADING\u2026 '+pct+'%';
+  if (!preloadFinished && preloadDoneW >= preloadTotal) finishPreload();
+}
+function finishPreload(){
+  if (preloadFinished) return; preloadFinished = true;
+  const l=document.getElementById('loading');
+  if (l){ l.style.opacity='0'; setTimeout(()=>{ l.style.display='none'; }, 360); }
+}
+function startPreload(){
+  PRELOAD.forEach(item => {
+    fetch(item.url).then(r=>r.blob()).then(()=>preloadTick(item.w)).catch(()=>preloadTick(item.w));
+  });
+  setTimeout(()=>{ if(!preloadFinished) finishPreload(); }, 25000);   // never hang the screen
+}
+
+const sheets = {};   // sheets[colorId][emotion] = {img, ok}
+function loadAllSheets(){
+  PALETTE.forEach(p => {
+    sheets[p.id] = {};
+    EMOTIONS.forEach(em => {
+      const img = new Image();
+      img.src = `${ASSET_BASE}sprites/dorcs/${em}01/webp/${p.id}-${em}-01.webp`;
+      const rec = { img, ok:false };
+      img.onload  = () => { rec.ok = true;  preloadTick(SPRITE_W); };
+      img.onerror = () => { rec.ok = false; preloadTick(SPRITE_W); };
+      sheets[p.id][em] = rec;
+    });
+  });
+}
+loadAllSheets();
+// snowball ammo sprites — drawn instead of coloring the ball during the Ice attack (freeze)
+const SNOW_SRC = ['Snow_ball_01.png','Snow_ball_02.png','Snow_ball_03.png','Snow_ball_04.png'];
+const snowBalls = [];
+function loadSnowBalls(){
+  for (const fn of SNOW_SRC){
+    const img=new Image(); const rec={img,ok:false};
+    img.onload=()=>{ rec.ok=true; }; img.onerror=()=>{ rec.ok=false; };
+    img.src = ASSET_BASE+'sprites/ball/snow_ball/'+fn;
+    snowBalls.push(rec);
+  }
+}
+loadSnowBalls();
+function snowReady(){ return snowBalls.some(r=>r.ok); }
+function snowImg(i){ const n=snowBalls.length; let r=snowBalls[((i%n)+n)%n]; if(!(r&&r.ok)) r=snowBalls.find(x=>x.ok); return r&&r.img; }
+// Brain Freeze power-up sheet (5 cols x 15 rows = 75 frames, 500px cells) — replaces the "?" circle
+const BF_COLS=5, BF_FRAMES=75, BF_CELL=500, BF_FPS=18;
+const brainFreeze={img:new Image(), ok:false};
+brainFreeze.img.onload=()=>{ brainFreeze.ok=true; };
+brainFreeze.img.onerror=()=>{ brainFreeze.ok=false; };
+brainFreeze.img.src=ASSET_BASE+'sprites/power_ups/brain_freeze_01.webp';
+function bfFrame(){ return Math.floor(performance.now()/(1000/BF_FPS)) % BF_FRAMES; }
+startPreload();
+
+/* draw one sprite frame of a given emotion, centered at (x,y), sized to d */
+/* icy-tinted "scared" sheets for the freeze power-up (built once per color, cached).
+   The sheet art is on transparent bg, so source-atop tints ONLY the sprite pixels. */
+const frozenCache = {};
+function frozenSheet(id){
+  if (frozenCache[id]) return frozenCache[id];
+  const rec = sheets[id] && sheets[id]['scared'];
+  if (!rec || !rec.ok) return null;
+  const img = rec.img, w = img.naturalWidth||img.width, h = img.naturalHeight||img.height;
+  const cv = document.createElement('canvas'); cv.width=w; cv.height=h;
+  const c = cv.getContext('2d');
+  c.drawImage(img,0,0);
+  c.globalCompositeOperation='source-atop';
+  c.fillStyle='rgba(150,210,255,0.3)';   // light icy wash; keep DORC colors readable
+  c.fillRect(0,0,w,h);
+  c.globalCompositeOperation='source-over';
+  frozenCache[id]=cv;
+  return cv;
+}
+function drawSprite(id, emotion, frame, x, y, d){
+  let s = sheets[id] && sheets[id][emotion];
+  if (!(s && s.ok) && sheets[id]){
+    // requested emotion not decoded yet -> use any loaded emotion of this color
+    for (const em of EMOTIONS){ const alt=sheets[id][em]; if (alt && alt.ok){ s=alt; break; } }
+  }
+  const sc = frame % SHEET_COLS, sr = Math.floor(frame / SHEET_COLS);
+  // frozen look: a blue outer glow that fades in/out — the sprite's own colors stay untouched
+  // ctx.shadowBlur is a per-draw software blur and this runs once per bubble
+  // on the board — 60-80 blurred draws a frame during a freeze, which is where
+  // the worst stalls were. The frost video overlay and the scared faces already
+  // carry the freeze read, so phones drop the per-sprite glow.
+  const glow = freezeAmt > 0.001 && !LOWFX;
+  if (glow){ ctx.save(); ctx.shadowColor=`rgba(150,215,255,${(0.85*freezeAmt).toFixed(3)})`; ctx.shadowBlur=18*freezeAmt; }
+  if (s && s.ok){
+    ctx.drawImage(s.img, sc*CELL, sr*CELL, CELL, CELL, x - d/2, y - d/2, d, d);
+  } else {
+    // fallback: flat colored blob so the game is playable before art loads
+    const hex = (PALETTE.find(p=>p.id===id)||PALETTE[0]).hex;
+    ctx.beginPath(); ctx.arc(x, y, d/2*0.92, 0, Math.PI*2);
+    ctx.fillStyle = hex; ctx.fill();
+    ctx.fillStyle = 'rgba(0,0,0,.85)';
+    ctx.beginPath(); ctx.arc(x-d*0.13, y-d*0.05, d*0.07, 0, Math.PI*2); ctx.fill();
+    ctx.beginPath(); ctx.arc(x+d*0.13, y-d*0.05, d*0.07, 0, Math.PI*2); ctx.fill();
+  }
+  if (glow){ ctx.restore(); }
+}
+function randEmotion(){ return EMOTIONS[Math.floor(Math.random()*EMOTIONS.length)]; }
+
+/* ============================================================================
+   GRID MODEL  (offset hex; even rows = COLS, odd rows = COLS-1, shifted +R)
+   ============================================================================ */
+let grid = [];        // grid[r] = array of cell|null
+let scrollY = 0;      // continuous descent offset (0..ROW_H)
+let parityOffset = 0; // flips on each unshift so a row's offset never changes under it
+
+/* a row's offset-parity follows the ROW, not its array index */
+function rowParity(r){ return (r + parityOffset) & 1; }      // 0 = flush, 1 = shifted
+function rowLen(r){ return rowParity(r) === 0 ? COLS : COLS - 1; }
+function cellX(r, c){
+  const off = (rowParity(r) === 0) ? R : D;   // shifted rows pushed right by R
+  return BOARD_X0 + off + c * D;
+}
+function cellY(r){ return GRID_Y0 + r * ROW_H + scrollY; }
+
+function makeCell(colorIdx){
+  return {
+    color: colorIdx,
+    id: PALETTE[colorIdx].id,
+    base: (Math.random()<0.5 ? 'goof' : 'grin'),  // default mood — never scared
+    naturalAfraid: false,   // in a same-color group of 3+
+    playerAfraid: false,    // part of a 2-group the player just made
+    frame: Math.floor(Math.random()*FRAMES),      // staggered start so the board never syncs
+    fc: Math.random()*(1/ANIM_FPS),               // random sub-frame phase
+    pop:0,
+  };
+}
+
+/* mark every DORC sitting in a same-color cluster of 3+ as afraid (recomputed each frame) */
+function recomputeAfraid(){
+  const seen=new Set(), key=(a,b)=>a+'_'+b;
+  for (let r=0;r<grid.length;r++) for (let c=0;c<grid[r].length;c++){ const cl=grid[r][c]; if (cl) cl.naturalAfraid=false; }
+  for (let r=0;r<grid.length;r++){
+    for (let c=0;c<grid[r].length;c++){
+      if (!grid[r][c] || seen.has(key(r,c))) continue;
+      const col=grid[r][c].color, st=[[r,c]], comp=[]; seen.add(key(r,c));
+      while (st.length){
+        const [cr,cc]=st.pop(); comp.push([cr,cc]);
+        for (const [nr,nc] of neighbors(cr,cc)){
+          if (seen.has(key(nr,nc))) continue;
+          if (grid[nr] && grid[nr][nc] && grid[nr][nc].color===col){ seen.add(key(nr,nc)); st.push([nr,nc]); }
+        }
+      }
+      if (comp.length>=3) for (const [gr,gc] of comp) grid[gr][gc].naturalAfraid=true;
+    }
+  }
+}
+function isAfraid(cell){ return cell.naturalAfraid || cell.playerAfraid; }
+function makeQuestionCell(){
+  return { color:-1, id:null, power:'question', base:'grin',
+    naturalAfraid:false, playerAfraid:false, frame:0, fc:0, pop:0 };
+}
+// "Methodology Madness" coin: each M coin wears a randomly assigned unstable/glitch
+// display font for its whole life (locked at spawn, so it never flickers). Cosmetic only.
+const COIN_FONTS = [
+  "'Rubik Glitch'", "'Rubik Wet Paint'", "'Rubik Puddles'", "'Rubik Maze'",
+  "'Rubik Beastly'", "'Nabla'", "'Major Mono Display'", "'VT323'", "'Press Start 2P'"
+];
+function pickCoinFont(){ return COIN_FONTS[(Math.random()*COIN_FONTS.length)|0]; }
+function makeCoinCell(){
+  return { color:-2, id:null, power:'coin', base:'grin', coinFont:pickCoinFont(),
+    naturalAfraid:false, playerAfraid:false, frame:0, fc:0, pop:0 };
+}
+const COIN_SHARE = 0.80;   // of the specials that spawn, how many are Methodology Tokens vs Brain Freeze
+function questionOnBoard(){
+  for (const row of grid) for (const cell of row) if (cell && cell.power==='question') return true;
+  return false;
+}
+function newRow(r){
+  const len = rowLen(r), row = [];
+  for (let c=0;c<len;c++) row.push(makeCell(randColorIdx()));
+  if (Math.random() < QUESTION_RATE){
+    const c = Math.floor(Math.random()*len);
+    let coin = Math.random() < COIN_SHARE;
+    if (!coin && questionOnBoard()) coin = true;   // never more than one Brain Freeze (?) on screen
+    row[c] = coin ? makeCoinCell() : makeQuestionCell();
+  }
+  return row;
+}
+function seedGrid(rows){
+  grid = [];
+  for (let r=0;r<rows;r++) grid.push(newRow(r));
+}
+
+/* neighbors in offset-hex coords */
+function neighbors(r,c){
+  const even = (rowParity(r) === 0);
+  const list = even
+    ? [[r,c-1],[r,c+1],[r-1,c-1],[r-1,c],[r+1,c-1],[r+1,c]]
+    : [[r,c-1],[r,c+1],[r-1,c],[r-1,c+1],[r+1,c],[r+1,c+1]];
+  const out = [];
+  for (const [nr,nc] of list){
+    if (nr<0 || nr>=grid.length) continue;
+    if (nc<0 || nc>=rowLen(nr)) continue;
+    out.push([nr,nc]);
+  }
+  return out;
+}
+
+/* find nearest empty cell to (x,y) that is adjacent to a filled cell or in row 0 */
+function snapTarget(x, y){
+  let best=null, bestD=Infinity;
+  for (let r=0;r<grid.length+1;r++){
+    const len = (r<grid.length) ? grid[r].length : rowLen(r);
+    for (let c=0;c<rowLen(r);c++){
+      const occupied = (r<grid.length) && grid[r][c];
+      if (occupied) continue;
+      // must touch the ceiling row or an existing bubble
+      let anchored = (r===0);
+      if (!anchored){ for (const [nr,nc] of neighbors(r,c)){ if (grid[nr] && grid[nr][nc]){ anchored=true; break; } } }
+      if (!anchored) continue;
+      const dx=x-cellX(r,c), dy=y-cellY(r);
+      const dd=dx*dx+dy*dy;
+      if (dd<bestD){ bestD=dd; best={r,c}; }
+    }
+  }
+  return best;
+}
+function ensureRow(r){ while (grid.length<=r) grid.push(grid.length%2===0?[]:[]); 
+  // pad row to full length with nulls
+  while (grid[r].length < rowLen(r)) grid[r].push(null);
+}
+function placeCell(r,c,colorIdx){ ensureRow(r); grid[r][c]=makeCell(colorIdx); }
+
+/* BFS same-color group from (r,c) */
+function colorGroup(r,c){
+  const target = grid[r][c].color, seen=new Set(), stack=[[r,c]], out=[];
+  const key=(a,b)=>a+'_'+b;
+  seen.add(key(r,c));
+  while (stack.length){
+    const [cr,cc]=stack.pop(); out.push([cr,cc]);
+    for (const [nr,nc] of neighbors(cr,cc)){
+      if (seen.has(key(nr,nc))) continue;
+      if (grid[nr] && grid[nr][nc] && grid[nr][nc].color===target){
+        seen.add(key(nr,nc)); stack.push([nr,nc]);
+      }
+    }
+  }
+  return out;
+}
+/* drop floaters: anything not connected to row 0 */
+let _lastDorcDrops=0;
+function dropFloaters(){
+  const seen=new Set(), key=(a,b)=>a+'_'+b, stack=[];
+  for (let c=0;c<rowLen(0);c++){ if (grid[0] && grid[0][c]){ seen.add(key(0,c)); stack.push([0,c]); } }
+  while (stack.length){
+    const [r,c]=stack.pop();
+    for (const [nr,nc] of neighbors(r,c)){
+      if (seen.has(key(nr,nc))) continue;
+      if (grid[nr] && grid[nr][nc]){ seen.add(key(nr,nc)); stack.push([nr,nc]); }
+    }
+  }
+  let dropped=0; _lastDorcDrops=0;
+  for (let r=0;r<grid.length;r++){
+    for (let c=0;c<grid[r].length;c++){
+      if (grid[r][c] && !seen.has(key(r,c))){
+        const cell=grid[r][c];
+        spawnFalling(r,c,cell); if (cell.color>=0) _lastDorcDrops++;
+        grid[r][c]=null; dropped++;
+      }
+    }
+  }
+  return dropped;
+}
+
+/* ============================================================================
+   FALLING (floater) + POP particle bookkeeping
+   ============================================================================ */
+let falling = [];   // {x,y,vy,id}
+function spawnFalling(r,c,cell){ falling.push({ x:cellX(r,c), y:cellY(r), vy:60+Math.random()*40, id:cell.id, emotion:'scared', frame:cell.frame, power:cell.power||null, coinFont:cell.coinFont }); spawnPopFx(cellX(r,c), cellY(r), cell); }
+
+/* ---- pop particle FX ----
+   One system, three moods keyed off game state:
+   - frozen  -> soft white SNOW POOFS (drift up then settle)
+   - madness -> chaotic RGB-split GLITCH SHARDS (the orbs breaking the game)
+   - normal  -> color-matched SPARK / firework burst in the DORC's color
+   Capped at SPARK_CAP live particles so a big clear can't tank the frame rate. */
+let sparks = [];                 // {x,y,vx,vy,life,max,col,kind,sz,spin,rot}
+const SPARK_CAP = 320;
+function spawnPopFx(x, y, cell){
+  if (sparks.length >= SPARK_CAP) return;
+  const frozen = isFrozen(), madness = madnessActive();
+  const hex = (cell && cell.color>=0 && PALETTE[cell.color]) ? PALETTE[cell.color].hex : '#10CFC9';
+  if (madness){
+    // CHAOTIC: many shards, high speed, RGB-split colors, jitter, spin — "uncontainable"
+    const n = 14;
+    for (let i=0;i<n && sparks.length<SPARK_CAP;i++){
+      const a=Math.random()*Math.PI*2, sp=2.5+Math.random()*6.5;
+      const cols=['#10CFC9','#FF2D9B','#7C5CFF','#ffffff'];
+      sparks.push({ x, y, vx:Math.cos(a)*sp, vy:Math.sin(a)*sp-1, life:1, max:0.45+Math.random()*0.4,
+        col:cols[(Math.random()*cols.length)|0], kind:'glitch', sz:2+Math.random()*4,
+        spin:(Math.random()*2-1)*0.5, rot:Math.random()*Math.PI });
+    }
+  } else if (frozen){
+    // SNOW POOF: gentle white motes that puff up and drift down
+    const n = 7;
+    for (let i=0;i<n && sparks.length<SPARK_CAP;i++){
+      const a=-Math.PI/2 + (Math.random()*2-1)*0.9, sp=0.6+Math.random()*1.8;
+      sparks.push({ x:x+(Math.random()*2-1)*8, y, vx:Math.cos(a)*sp, vy:Math.sin(a)*sp, life:1,
+        max:0.7+Math.random()*0.5, col:'#eaf6ff', kind:'snow', sz:1.5+Math.random()*2.5,
+        spin:0, rot:0 });
+    }
+  } else {
+    // SPARK BURST in the DORC's color
+    const n = 9;
+    for (let i=0;i<n && sparks.length<SPARK_CAP;i++){
+      const a=Math.random()*Math.PI*2, sp=1.5+Math.random()*4;
+      sparks.push({ x, y, vx:Math.cos(a)*sp, vy:Math.sin(a)*sp-1.2, life:1, max:0.4+Math.random()*0.35,
+        col:hex, kind:'spark', sz:2+Math.random()*2.5, spin:0, rot:0 });
+    }
+  }
+}
+function updateSparks(dt){
+  for (const p of sparks){
+    p.life -= dt / p.max;
+    if (p.kind==='snow'){ p.vy += 1.6*dt; p.x += p.vx; p.y += p.vy; p.vx*=0.99; }   // float + settle
+    else if (p.kind==='glitch'){ p.vy += 3*dt; p.x += p.vx + (Math.random()*2-1)*1.2; p.y += p.vy; p.rot+=p.spin; }  // jitter
+    else { p.vy += 9*dt; p.x += p.vx; p.y += p.vy; }                                  // spark gravity
+  }
+  sparks = sparks.filter(p => p.life > 0);
+}
+function drawSparks(){
+  for (const p of sparks){
+    const a = Math.max(0, p.life);
+    ctx.globalAlpha = a;
+    if (p.kind==='snow'){
+      ctx.fillStyle=p.col; ctx.beginPath(); ctx.arc(p.x,p.y,p.sz*a,0,Math.PI*2); ctx.fill();
+    } else if (p.kind==='glitch'){
+      // RGB-split shard: draw the rect thrice, offset in cyan/magenta + core
+      ctx.fillStyle='#10CFC9'; ctx.fillRect(p.x-2, p.y, p.sz, p.sz);
+      ctx.fillStyle='#FF2D9B'; ctx.fillRect(p.x+2, p.y, p.sz, p.sz);
+      ctx.fillStyle=p.col;     ctx.fillRect(p.x, p.y, p.sz, p.sz);
+    } else {
+      ctx.fillStyle=p.col; ctx.fillRect(p.x, p.y, p.sz, p.sz);
+    }
+  }
+  ctx.globalAlpha = 1;
+}
+
+/* ============================================================================
+   BALL / LAUNCHER
+   ============================================================================ */
+let cur = randColorIdx(), nxt = randColorIdx(), hold = null;
+let ball = null;         // {x,y,vx,vy,color}
+let aimAngle = -Math.PI/2;
+const BALL_SPEED = 1080;
+
+function fire(){
+  if (ball || state!=='play' || paused) return;
+  const a = aimAngle;
+  if (madnessActive()){                                  // Madness: fire a colorless glitch bomb
+    ball = { x:LAUNCH_X, y:LAUNCH_Y, vx:Math.cos(a)*BALL_SPEED, vy:Math.sin(a)*BALL_SPEED, glitch:true };
+    glitchBalls--; ballsFired++; ballLaunchSfx();
+    return;
+  }
+  ball = { x:LAUNCH_X, y:LAUNCH_Y, vx:Math.cos(a)*BALL_SPEED, vy:Math.sin(a)*BALL_SPEED, color:cur };
+  cur = nxt; nxt = randColorIdx(); ballsFired++; ballLaunchSfx();
+}
+
+/* ============================================================================
+   METHODOLOGY MADNESS  —  collect 3 coins -> weighted wheel (1-5) -> that many
+   colorless glitch bombs. Each bomb vaporizes every DORC it touches (any color)
+   and floods through each touched DORC's own color cluster. While balls are in
+   hand: descent slows, living DORCs glitch (scared-frame splice + color banding),
+   a static wash runs. Balls out -> everything snaps back. Resets each playthrough.
+   ============================================================================ */
+let glitchBalls = 0;                  // user-facing: "Madness Orbs" (queue, max 5)
+let barGlitch = 0;                   // 0..1 bar-glitch intensity; ramps with orbs, fades when gone
+function madnessActive(){ return glitchBalls > 0 || (ball && ball.glitch); }
+const MADNESS_DESCENT = 0.45;     // descent speed factor during Madness (tunable)
+const MADNESS_SPLICE  = 0.22;     // per-DORC per-frame chance of a scared-frame splice
+const MADNESS_BAND    = 0.18;     // per-DORC per-frame chance of color-banding
+let lastMadnessHit = -1;          // no-repeat tracker for the hit SFX
+
+function madnessHitSfx(){
+  let i; do { i = 1 + (Math.random()*10|0); } while (i === lastMadnessHit);
+  lastMadnessHit = i;
+  playSfxFile('other/power_up_fx/madness_hit/madness_hit_'+String(i).padStart(2,'0')+'.mp3');
+}
+
+/* colorless bomb: kill contact neighbors (any color), then flood each through
+   its own color cluster. Built on neighbors() + colorGroup() + dropFloaters(). */
+function detonateGlitch(r,c){
+  const seen=new Set(), kills=[], K=(a,b)=>a+'_'+b;
+  const add=(rr,cc)=>{ if(grid[rr]&&grid[rr][cc]){ const k=K(rr,cc); if(!seen.has(k)){ seen.add(k); kills.push([rr,cc]); } } };
+  add(r,c);
+  for (const [nr,nc] of neighbors(r,c)) add(nr,nc);      // contact set (any color)
+  const contact = kills.slice();
+  for (const [sr,sc] of contact){                        // flood each contact DORC's own color
+    const cell = grid[sr][sc]; if(!cell || cell.color < 0) continue;
+    for (const [gr,gc] of colorGroup(sr,sc)) add(gr,gc);
+  }
+  for (const [kr,kc] of kills){ const cell=grid[kr][kc]; if(cell && cell.color>=0) spawnFalling(kr,kc,cell); grid[kr][kc]=null; }
+  ball = null;
+  const n = kills.length;
+  if (n) addScore(n*10);
+  flash = Math.min(1, 0.35 + n*0.03);
+  madnessHitSfx();
+  dropFloaters();
+}
+
+/* ---- the weighted wheel (1-5), real outcome + cosmetic reveal ---- */
+const WHEEL_WEIGHTS={1:35,2:27,3:19,4:12,5:7}, WHEEL_SEGS=[1,2,3,4,5];
+const WHEEL_SPIN_MS=3600, WHEEL_TURNS=5;
+const WHEEL_COL={1:'#3A5A9C',2:'#7C5CFF',3:'#10CFC9',4:'#FF2D9B',5:'#FFC846'};
+let madWheelRot=-Math.PI/2;
+function rollWheel(){ const t=Object.values(WHEEL_WEIGHTS).reduce((a,b)=>a+b,0); let x=Math.random()*t;
+  for(const n of WHEEL_SEGS){ x-=WHEEL_WEIGHTS[n]; if(x<=0) return n; } return 5; }
+function drawMadWheel(cvw, rot){
+  const c=cvw.getContext('2d'), R=cvw.width/2, RR=R-30, seg=Math.PI*2/5;
+  c.clearRect(0,0,cvw.width,cvw.height); c.save(); c.translate(R,R); c.rotate(rot);
+  WHEEL_SEGS.forEach((n,i)=>{ const a0=i*seg,a1=a0+seg;
+    c.beginPath(); c.moveTo(0,0); c.arc(0,0,RR-1,a0,a1); c.closePath();
+    const g=c.createRadialGradient(0,0,RR*0.2,0,0,RR); g.addColorStop(0,WHEEL_COL[n]); g.addColorStop(1,'#06101c');
+    c.fillStyle=g; c.fill(); c.strokeStyle=WHEEL_COL[n]; c.lineWidth=2; c.shadowColor=WHEEL_COL[n]; c.shadowBlur=10; c.stroke(); c.shadowBlur=0;
+    c.save(); c.rotate(a0+seg/2); c.translate(RR*0.62,0); c.rotate(Math.PI/2);
+    c.fillStyle='#fff'; c.font=(n===5?'bold 40px':'bold 32px')+" 'Inter',sans-serif";
+    c.textAlign='center'; c.textBaseline='middle'; c.shadowColor=WHEEL_COL[n]; c.shadowBlur=n>=4?16:6; c.fillText(n,0,0); c.shadowBlur=0; c.restore();
+  });
+  c.beginPath(); c.arc(0,0,RR,0,Math.PI*2); c.strokeStyle='#10CFC9'; c.lineWidth=4; c.shadowColor='#10CFC9'; c.shadowBlur=22; c.stroke();
+  c.shadowBlur=22; c.stroke(); c.shadowBlur=0; c.restore();   // double-stroke = fuller glow, all inside the canvas
+}
+function triggerMadness(){
+  coinsCollected = 0;
+  const overlay=document.getElementById('madness'); if(!overlay){ glitchBalls=Math.max(glitchBalls, rollWheel()); return; }
+  const cvw=document.getElementById('madWheel'), resEl=document.getElementById('madResult');
+  resEl.textContent=''; overlay.style.display='flex'; paused=true;
+  const result=rollWheel(), seg=Math.PI*2/5, idx=WHEEL_SEGS.indexOf(result);
+  const targetMod=((-Math.PI/2-(idx*seg+seg/2))%(Math.PI*2)+Math.PI*2)%(Math.PI*2);
+  const from=madWheelRot, curMod=((from%(Math.PI*2))+Math.PI*2)%(Math.PI*2);
+  let delta=targetMod-curMod; if(delta<0) delta+=Math.PI*2;
+  const to=from+delta+WHEEL_TURNS*Math.PI*2, t0=performance.now(); let lastSeg=-1;
+  (function frame(now){
+    const p=Math.min(1,(now-t0)/WHEEL_SPIN_MS), e=1-Math.pow(1-p,4);
+    madWheelRot=from+(to-from)*e; drawMadWheel(cvw, madWheelRot);
+    const s=Math.floor((((madWheelRot%(Math.PI*2))+Math.PI*2)%(Math.PI*2))/seg);
+    if(s!==lastSeg){ lastSeg=s; if(p<0.99) blip(300+ (1-p)*500,0.03,'square'); }
+    if(p<1) requestAnimationFrame(frame);
+    else {
+      glitchBalls = result;
+      blip(880,0.14,'sine'); setTimeout(()=>blip(1170,0.18,'sine'),130);
+      resEl.textContent = (result===5?'JACKPOT! ':'')+result+' MADNESS ORB'+(result>1?'S':'');
+      setTimeout(()=>{ overlay.style.display='none'; paused=false; }, 1700);
+    }
+  })(t0);
+}
+function drawGlitchBall(x,y,rad){
+  const t=performance.now();
+  const g=ctx.createRadialGradient(x,y,rad*0.4,x,y,rad*1.8);
+  g.addColorStop(0,'rgba(124,92,255,.5)'); g.addColorStop(0.5,'rgba(16,207,201,.22)'); g.addColorStop(1,'rgba(124,92,255,0)');
+  ctx.fillStyle=g; ctx.beginPath(); ctx.arc(x,y,rad*1.8,0,Math.PI*2); ctx.fill();
+  const off=2+Math.sin(t/60)*1.5; ctx.globalAlpha=0.8;
+  ctx.fillStyle='#10CFC9'; ctx.beginPath(); ctx.arc(x-off,y,rad*0.9,0,Math.PI*2); ctx.fill();
+  ctx.fillStyle='#FF2D9B'; ctx.beginPath(); ctx.arc(x+off,y,rad*0.9,0,Math.PI*2); ctx.fill();
+  ctx.globalAlpha=1; ctx.fillStyle='#0a1018'; ctx.beginPath(); ctx.arc(x,y,rad*0.85,0,Math.PI*2); ctx.fill();
+  for (let i=0;i<3;i++){ if(Math.random()<0.6){ const sy=y-rad+Math.random()*rad*2, sh=1+Math.random()*3;
+    ctx.fillStyle=Math.random()<0.5?'#10CFC9':'#FF2D9B'; ctx.globalAlpha=0.8; ctx.fillRect(x-rad,sy,rad*2,sh); ctx.globalAlpha=1; } }
+  ctx.lineWidth=2; ctx.strokeStyle='#7C5CFF'; ctx.beginPath(); ctx.arc(x,y,rad*0.9,0,Math.PI*2); ctx.stroke();
+}
+function drawDorcGlitch(cell,x,y,d){
+  const splice = Math.random() < MADNESS_SPLICE;
+  const emo = splice ? 'scared' : cell.base;
+  const frame = splice ? (Math.random()*48|0) : cell.frame;
+  const jx = (Math.random()<0.3) ? (Math.random()*6-3) : 0;
+  drawSprite(cell.id, emo, frame, x+jx, y, d);
+  if (Math.random() < MADNESS_BAND){
+    const bands=1+(Math.random()*2|0);
+    for(let i=0;i<bands;i++){ const by=y-d*0.4+Math.random()*d*0.8, bh=2+Math.random()*4;
+      ctx.globalAlpha=0.35; ctx.fillStyle=Math.random()<0.5?'#10CFC9':'#FF2D9B';
+      ctx.fillRect(x-d*0.5+(Math.random()*6-3), by, d, bh); ctx.globalAlpha=1; }
+  }
+}
+function drawMadnessStatic(){
+  const x0=BOARD_X0, y0=GRID_Y0, w=COLS*D, h=HUD_Y-GRID_Y0;
+  for (let i=0;i<50;i++){ ctx.globalAlpha=0.04+Math.random()*0.05;
+    ctx.fillStyle=Math.random()<0.5?'#10CFC9':'#FF2D9B';
+    ctx.fillRect(x0+Math.random()*w, y0+Math.random()*h, 1+Math.random()*2, 1+Math.random()*2); }
+  if (Math.random()<0.4){ const ty=y0+Math.random()*h;
+    ctx.globalAlpha=0.12; ctx.fillStyle='#10CFC9'; ctx.fillRect(x0,ty,w,1);
+    ctx.fillStyle='#FF2D9B'; ctx.fillRect(x0,ty+2,w,1); }
+  ctx.globalAlpha=1;
+}
+
+function stepBall(dt){
+  if (!ball) return;
+  const sub = 4;                       // substeps to avoid tunneling
+  for (let i=0;i<sub;i++){
+    ball.x += ball.vx*dt/sub;
+    ball.y += ball.vy*dt/sub;
+    // walls
+    if (ball.x - R < BOARD_X0){ ball.x = BOARD_X0+R; ball.vx = Math.abs(ball.vx); }
+    const rightWall = BOARD_X0 + COLS*D;
+    if (ball.x + R > rightWall){ ball.x = rightWall-R; ball.vx = -Math.abs(ball.vx); }
+    // ceiling
+    if (ball.y - R <= GRID_Y0 + scrollY){ if (ball.glitch){ ball=null; return; } return landBall(); }
+    // collide: pick the NEAREST in-range bubble so a dead-on hit on a special
+    // isn't stolen by a neighbor that happened to be scanned first
+    let hr=-1, hc=-1, hd=Infinity;
+    for (let r=0;r<grid.length;r++){
+      for (let c=0;c<grid[r].length;c++){
+        if (!grid[r][c]) continue;
+        const dx=ball.x-cellX(r,c), dy=ball.y-cellY(r);
+        const d2=dx*dx+dy*dy;
+        if (d2 <= (D*0.92)*(D*0.92) && d2 < hd){ hd=d2; hr=r; hc=c; }
+      }
+    }
+    if (hr>=0){
+      if (ball.glitch) return detonateGlitch(hr,hc);     // colorless bomb
+      const cell=grid[hr][hc];
+      if (cell.power==='question') return hitQuestion(hr,hc);
+      if (cell.power==='coin') return hitCoin(hr,hc);
+      return landBall();
+    }
+  }
+}
+function landBall(){
+  const t = snapTarget(ball.x, ball.y);
+  const color = ball.color; ball=null;
+  if (!t){ return; }
+  // landing next to a special activates it instead of placing the ball
+  for (const [nr,nc] of neighbors(t.r,t.c)){
+    const cell = grid[nr] && grid[nr][nc];
+    if (cell && cell.power==='question') return hitQuestion(nr,nc);
+    if (cell && cell.power==='coin') return hitCoin(nr,nc);
+  }
+  placeCell(t.r, t.c, color);
+  sfxLand();
+  resolve(t.r, t.c);
+}
+function resolve(r,c){
+  const group = colorGroup(r,c);
+  if (group.length>=3){
+    lastPop = group.length;
+    for (const [gr,gc] of group){ if (grid[gr][gc]) grid[gr][gc].pop=1; }
+    // score: 10 each, escalating bonus for big groups
+    let pts = group.length*10 + Math.max(0,(group.length-3))*15;
+    addScore(pts); sfxPop(group.length);
+    // 4+ pop -> Side-Qlik voice line + special anim
+    if (group.length>=4) onBigCombo(group.length);
+    // clear after a short pop tick (handled in update via pop timer); remove now for logic
+    for (const [gr,gc] of group){
+      const cell=grid[gr][gc];
+      if (cell) spawnPopFx(cellX(gr,gc), cellY(gr), cell);   // burst at each popped DORC
+      grid[gr][gc]=null;
+    }
+    const dropped = dropFloaters();
+    if (dropped) addScore(dropped*20);   // floaters worth 2x
+    bbAdd(group.length + _lastDorcDrops); // Brain Blast meter (gated: not while frozen)
+  } else if (group.length===2){
+    // player set up a 2-group (one away from popping) -> those two get scared
+    for (const [gr,gc] of group){ if (grid[gr][gc]) grid[gr][gc].playerAfraid=true; }
+  }
+}
+
+/* ============================================================================
+   SCORE / STATE
+   ============================================================================ */
+let state = 'start';     // start | play | over
+let score = 0;
+// three independent learning streams: q = freeze questions, c = coach coins, t = glossary terms
+let qAtt=0,qCor=0, cAtt=0,cCor=0, tAtt=0,tCor=0;
+let runStart = 0;
+let descentSpeed = 7;    // px/sec, ramps over time
+/* ---- diagnostics ---- */
+let paused = false, showDebug = false;
+let rowsSpawned = 0, ballsFired = 0, lastPop = 0, fps = 0;
+const player = { trigram:null, territory:null, country_code:null, lifetime:0, signedIn:false };
+
+function addScore(n){
+  score = Math.max(0, score + n);
+  const unlocked = colorsForScore(score);
+  if (unlocked > activeCount){ activeCount = unlocked; lastUnlockColors = unlocked; }  // new color enters live
+}
+
+function onBigCombo(n){
+  // 4+ pop -> Side-Qlik voice line + screen flash
+  sideQlikLine();
+  flash = 0.4;
+}
+let menuOpen = false;
+function togglePauseMenu(){
+  if (state!=='play') return;
+  if (document.getElementById('quiz').style.display==='flex') return;  // not during a question
+  if (coinModalOpen()) return;                                          // not during the coin timer
+  if (bbState!=='idle') return;                                         // not during a Brain Blast
+  menuOpen = !menuOpen; paused = menuOpen;
+  document.getElementById('pause').style.display = menuOpen ? 'flex' : 'none';
+  setMenuMuffle(menuOpen);   // music goes "outside"/muffled on the menu
+}
+/* ---- leaving mid-run --------------------------------------------------
+   A run that is walked away from is VOID: no BLITZ_RESULT is posted, so no
+   points are banked. That is deliberate — before this, tapping the room's X
+   left the game running underneath, still descending, still playing audio,
+   and a player could come back to a board that had moved on without them.
+
+   Called from the game's own X (touch) and from the parent when it leaves the
+   Play view by any route, so there is no way out that leaves a run live. */
+function abandonRun(){
+  if (state !== 'play' && state !== 'fly' && state !== 'pop') return;
+  state = 'start';
+  paused = false; menuOpen = false;
+  stopMusic(); stopVoice(); stopFreezeAudio(); stopHorn();
+  resetHazard(); resetCoin(); resetBlast();
+  ball = null; falling = []; sparks = [];
+  ['pause','quiz','over'].forEach(id => { const e=document.getElementById(id); if(e) e.style.display='none'; });
+  const startEl = document.getElementById('start');
+  if (startEl){
+    startEl.style.display = 'flex';
+    const v = startEl.querySelector('video');
+    if (v) v.play().catch(()=>{});      // it was paused when play began
+  }
+}
+
+/* The game's own X. Tells the room to take the player back, and voids the run
+   here too so nothing keeps ticking if the room is slow to respond. */
+function exitToRoom(){
+  abandonRun();
+  try { if (window.parent !== window) window.parent.postMessage({ type:'BLITZ_EXIT' }, '*'); } catch(e){}
+}
+
+let flash = 0;            // brief screen flash on big combos
+
+function startGame(){
+  score=0; qAtt=0;qCor=0; cAtt=0;cCor=0; tAtt=0;tCor=0; falling=[]; sparks=[]; ball=null; scrollY=0; parityOffset=0;
+  descentSpeed=4; flash=0; coinsCollected=0; glitchBalls=0;
+  unlockBar = (player.territoryHigh && player.territoryHigh > 0) ? player.territoryHigh : UNLOCK_FLOOR;
+  activeCount = BASE_COLORS; lastUnlockColors = BASE_COLORS;
+  rowsSpawned=0; ballsFired=0; lastPop=0; paused=false; menuOpen=false;
+  freezeUntil=0; freezeAmt=0; wasFrozen=false; curQ=null; answering=false; resetHazard(); resetVoiceBags(); resetCoin(); coinQIdx=0;
+  stopFreezeAudio(); setMenuMuffle(false); resetBlast();
+  cur=randColorIdx(); nxt=randColorIdx(); hold=null;
+  seedGrid(4);
+  runStart = performance.now();
+  state='play';
+  // 13MB autoplay/loop webm. display:none is not a reliable stop for video
+  // decoding, and a phone quietly decoding it behind the game costs frames and
+  // battery for something nobody can see.
+  const startEl = document.getElementById('start');
+  const startVid = startEl && startEl.querySelector('video');
+  if (startVid){ try { startVid.pause(); } catch(e){} }
+  startEl.style.display='none';
+  document.getElementById('over').style.display='none';
+  document.getElementById('pause').style.display='none';
+  document.getElementById('quiz').style.display='none';
+  startMusic();
+}
+function gameOver(){
+  state='over';
+  stopMusic(); resetHazard(); stopVoice(); resetCoin(); stopFreezeAudio(); resetBlast();
+
+  const durationSec = Math.round((performance.now()-runStart)/1000);
+  const gate = (player.territoryHigh && player.territoryHigh>0) ? player.territoryHigh : UNLOCK_FLOOR;
+  const beatHigh = score > gate;
+
+  // populate the card
+  document.getElementById('finalScore').textContent = '0';
+  document.getElementById('overTerrHigh').textContent = (beatHigh?score:gate).toLocaleString();
+  document.getElementById('overTime').textContent = fmtClock(durationSec);
+  document.getElementById('overQ').textContent = `${qCor}/${qAtt}`;
+  document.getElementById('overC').textContent = `${cCor}/${cAtt}`;
+  document.getElementById('overT').textContent = `${tCor}/${tAtt}`;
+  const banner = document.getElementById('overHighBanner');
+  banner.classList.toggle('show', beatHigh);
+
+  document.getElementById('over').style.display='flex';
+  // dramatic sequence: sound, fireworks, count up the score
+  try { playSfxFile('other/ball_fx/Switch_01.mp3'); } catch(e){}
+  startOverFx(beatHigh);
+  countUp(document.getElementById('finalScore'), score, 1100);
+  if (beatHigh){ setTimeout(()=>{ try{ playSfxFile('other/power_up_fx/madness_hit/madness_hit_05.mp3'); }catch(e){} }, 550); }
+  // report up to the REC Room parent (ignored in practice mode)
+  if (player.signedIn && window.parent !== window){
+    window.parent.postMessage({
+      type:'BLITZ_RESULT',
+      trigram:player.trigram, territory:player.territory,
+      country_code:player.country_code,
+      score, durationSec,
+      // blended totals (back-compat) + the three separate learning streams
+      attempted: qAtt+cAtt+tAtt, correct: qCor+cCor+tCor,
+      stats:{
+        questions:{ attempted:qAtt, correct:qCor },   // freeze / Qlik questions
+        coins:    { attempted:cAtt, correct:cCor },   // Coach Kent methodology
+        terms:    { attempted:tAtt, correct:tCor }    // glossary Brain Blast
+      }
+    }, '*');
+  }
+}
+
+/* ============================================================================
+   UPDATE
+   ============================================================================ */
+function update(dt, now){
+  if (state!=='play') return;
+
+  // descent (slowed while FREEZE power-up is active)
+  descentSpeed += dt*0.06;             // gentle ramp
+  scrollY += descentSpeed * (isFrozen() ? 0.18 : madnessActive() ? MADNESS_DESCENT : 1) * dt;
+  // bar-glitch intensity: rise fast while orbs queued, fade out when the last one fires
+  { const target = glitchBalls>0 ? Math.min(1, 0.45 + glitchBalls*0.11) : 0;
+    barGlitch += (target - barGlitch) * Math.min(1, dt*8); if (barGlitch<0.01 && target===0) barGlitch=0; }
+  while (scrollY >= ROW_H){
+    scrollY -= ROW_H;
+    parityOffset ^= 1;            // keep every existing row's offset stable
+    grid.unshift(newRow(0));      // newRow uses rowLen(0) under the flipped parity
+    rowsSpawned++;
+  }
+
+  // hazard zone audio (enter/exit edge detection inside)
+  updateHazard();
+  bbUpdate(dt);   // Brain Blast cooldown timer + hazard-zone meter drain
+  if (freezeAudioOn && !isFrozen()) stopFreezeAudio();   // freeze window ended
+  // ease the frost intensity: ices on quickly, thaws out slowly
+  { const tgt = isFrozen() ? 1 : 0;
+    const step = dt*1000 / (tgt>freezeAmt ? FREEZE_FADE_IN : FREEZE_FADE_OUT);
+    freezeAmt = tgt>freezeAmt ? Math.min(tgt, freezeAmt+step) : Math.max(tgt, freezeAmt-step);
+  }
+  // on the freeze edges: snap the whole board to "scared" on a random frame, then snap back to original
+  { const fz = isFrozen();
+    if (fz && !wasFrozen){
+      for (const row of grid) for (const cell of row) if (cell){ cell._sf = cell.frame; cell.frame = Math.floor(Math.random()*FRAMES); }
+    } else if (!fz && wasFrozen){
+      for (const row of grid) for (const cell of row) if (cell && cell._sf!=null){ cell.frame = cell._sf; cell._sf = null; }
+    }
+    wasFrozen = fz;
+  }
+
+  // ball
+  stepBall(dt);
+
+  // falling floaters
+  for (const f of falling){ f.vy += 900*dt; f.y += f.vy*dt; }
+  falling = falling.filter(f => f.y < H + R);
+  updateSparks(dt);
+
+  // sprite animation: every DORC loops its emotion continuously, desynced
+  const fdt = 1/ANIM_FPS;
+  for (let r=0;r<grid.length;r++){
+    for (let c=0;c<grid[r].length;c++){
+      const cell=grid[r][c]; if (!cell) continue;
+      cell.fc += dt;
+      while (cell.fc >= fdt){ cell.fc -= fdt; cell.frame = (cell.frame+1) % FRAMES; }
+    }
+  }
+  recomputeAfraid();   // who's in a 3+ cluster right now
+
+  if (flash>0) flash -= dt;
+
+  // game over check: any filled bubble crosses the danger line
+  for (let r=grid.length-1;r>=0;r--){
+    for (let c=0;c<grid[r].length;c++){
+      if (grid[r][c] && cellY(r)+R >= DANGER_Y){ return gameOver(); }
+    }
+  }
+}
+
+/* ============================================================================
+   AIM PREVIEW
+   ============================================================================ */
+function previewPath(){
+  let x=LAUNCH_X, y=LAUNCH_Y, vx=Math.cos(aimAngle), vy=Math.sin(aimAngle);
+  const pts=[{x,y}]; const step=10;
+  for (let i=0;i<160;i++){
+    x+=vx*step; y+=vy*step;
+    if (x-R<BOARD_X0){ x=BOARD_X0+R; vx=Math.abs(vx); }
+    const rw=BOARD_X0+COLS*D; if (x+R>rw){ x=rw-R; vx=-Math.abs(vx); }
+    pts.push({x,y});
+    if (y-R<=GRID_Y0+scrollY) break;
+    let hit=false;
+    for (let r=0;r<grid.length&&!hit;r++) for (let c=0;c<grid[r].length;c++){
+      if (!grid[r][c]) continue;
+      const dx=x-cellX(r,c), dy=y-cellY(r);
+      if (dx*dx+dy*dy<=(D*0.92)*(D*0.92)){ hit=true; break; }
+    }
+    if (hit) break;
+  }
+  return pts;
+}
+
+/* ============================================================================
+   RENDER
+   ============================================================================ */
+/* The galaxy, the 140 stars and the ground band never move, but they were
+   being rebuilt every frame: two gradients plus 140 fillRects plus 140
+   globalAlpha writes, ~282 operations for a still picture. Painted once into
+   an offscreen canvas and blitted after that. Pixel-identical output. */
+let bgCache = null;
+function buildBackground(){
+  const off = document.createElement('canvas');
+  off.width = W; off.height = H;
+  const b = off.getContext('2d');
+  const g = b.createLinearGradient(0,0,0,H);
+  g.addColorStop(0,'#1a1240'); g.addColorStop(0.45,'#241a52'); g.addColorStop(0.7,'#13213f'); g.addColorStop(1,'#0a1322');
+  b.fillStyle=g; b.fillRect(0,0,W,H);
+  b.fillStyle='rgba(255,255,255,.7)';
+  for (const s of stars){ b.globalAlpha=s.a; b.fillRect(s.x,s.y,s.r,s.r); }
+  b.globalAlpha=1;
+  const mg=b.createLinearGradient(0,H-150,0,H);
+  mg.addColorStop(0,'rgba(40,46,66,0)'); mg.addColorStop(1,'rgba(28,32,48,.95)');
+  b.fillStyle=mg; b.fillRect(0,H-150,W,150);
+  bgCache = off;
+}
+function drawBackground(){
+  if (!bgCache) buildBackground();
+  ctx.drawImage(bgCache, 0, 0, W, H);
+}
+const stars=[]; for (let i=0;i<140;i++) stars.push({x:Math.random()*W,y:Math.random()*H*0.8,r:Math.random()<.2?2:1,a:.3+Math.random()*.7});
+
+function drawBoardFrame(){
+  // board bounds
+  ctx.strokeStyle='rgba(16,207,201,.16)'; ctx.lineWidth=1;
+  ctx.strokeRect(BOARD_X0, GRID_Y0-2, COLS*D, DANGER_Y-GRID_Y0+2);
+  // danger line
+  const pulse = 0.4+0.3*Math.sin(performance.now()/300);
+  ctx.strokeStyle=`rgba(184,49,49,${state==='play'?pulse:.25})`;
+  ctx.lineWidth=2; ctx.setLineDash([12,8]);
+  ctx.beginPath(); ctx.moveTo(BOARD_X0,DANGER_Y); ctx.lineTo(BOARD_X0+COLS*D,DANGER_Y); ctx.stroke();
+  ctx.setLineDash([]);
+}
+
+function drawQuestionOrb(x,y,d){
+  const r=d/2;
+  const g=ctx.createRadialGradient(x-r*0.3,y-r*0.3,r*0.1,x,y,r);
+  g.addColorStop(0,'#0e2a22'); g.addColorStop(0.6,'#0a1d2c'); g.addColorStop(1,'#06121d');
+  ctx.beginPath(); ctx.arc(x,y,r*0.94,0,Math.PI*2); ctx.fillStyle=g; ctx.fill();
+  const pulse=0.5+0.5*Math.sin(performance.now()/220);
+  ctx.lineWidth=2.5; ctx.strokeStyle=`rgba(0,152,69,${0.5+0.5*pulse})`; ctx.stroke();
+  ctx.fillStyle=`rgba(16,207,201,${0.7+0.3*pulse})`;
+  ctx.font="700 30px 'Press Start 2P'"; ctx.textAlign='center'; ctx.textBaseline='middle';
+  ctx.fillText('?', x, y+2); ctx.textBaseline='alphabetic'; ctx.textAlign='left';
+}
+function drawBrainFreeze(x,y,d){
+  if (!brainFreeze.ok){ drawQuestionOrb(x,y,d); return; }   // "?" fallback until the sheet loads
+  const fr=bfFrame(), sc=fr%BF_COLS, sr=Math.floor(fr/BF_COLS);
+  ctx.drawImage(brainFreeze.img, sc*BF_CELL, sr*BF_CELL, BF_CELL, BF_CELL, x-d/2, y-d/2, d, d);
+}
+function drawCoinOrb(x,y,d,font){
+  const r=d/2*0.94, t=performance.now()/1000;
+  const sx=Math.abs(Math.cos(t*3.2));            // horizontal squash fakes a 3D spin
+  ctx.save();
+  ctx.translate(x,y); ctx.scale(Math.max(0.12,sx),1);
+  const g=ctx.createRadialGradient(-r*0.3,-r*0.3,r*0.1,0,0,r);
+  g.addColorStop(0,'#FFF3C4'); g.addColorStop(0.5,'#FFC846'); g.addColorStop(1,'#A9760A');
+  ctx.beginPath(); ctx.arc(0,0,r,0,Math.PI*2); ctx.fillStyle=g; ctx.fill();
+  ctx.lineWidth=2.5; ctx.strokeStyle='#7a5a08'; ctx.stroke();
+  ctx.restore();
+  if (sx>0.45){                                  // M faces us only when the coin isn't edge-on
+    ctx.fillStyle=`rgba(110,72,8,${Math.min(1,(sx-0.45)/0.3)})`;
+    const cf = font || "'Press Start 2P'";
+    // slab/mono faces read small; bump size a touch for the ornate ones
+    const big = /Nabla|Beastly|Wet Paint|Puddles|Maze/.test(cf);
+    ctx.font = "700 " + (big?22:18) + "px " + cf; ctx.textAlign='center'; ctx.textBaseline='middle';
+    ctx.fillText('M', x, y+1); ctx.textBaseline='alphabetic'; ctx.textAlign='left';
+  }
+}
+function drawBubbles(){
+  for (let r=0;r<grid.length;r++){
+    for (let c=0;c<grid[r].length;c++){
+      const cell=grid[r][c]; if (!cell) continue;
+      const x=cellX(r,c), y=cellY(r);
+      if (y < GRID_Y0-R || y > H+R) continue;
+      if (cell.power==='question'){ drawBrainFreeze(x,y,D*0.98); continue; }
+      if (cell.power==='coin'){ drawCoinOrb(x,y,D*0.98,cell.coinFont); continue; }
+      if (madnessActive() && cell.color>=0){ drawDorcGlitch(cell, x, y, D*0.98); }
+      else {
+        const emo = (isFrozen() || isAfraid(cell)) ? 'scared' : cell.base;
+        drawSprite(cell.id, emo, cell.frame, x, y, D*0.98);
+      }
+    }
+  }
+  for (const f of falling){
+    if (f.power==='question') drawBrainFreeze(f.x, f.y, D*0.98);
+    else if (f.power==='coin') drawCoinOrb(f.x, f.y, D*0.98, f.coinFont);
+    else drawSprite(f.id, f.emotion, f.frame, f.x, f.y, D*0.98);
+  }
+  drawSparks();
+}
+
+function hexA(hex,a){ const n=parseInt(hex.slice(1),16); return `rgba(${(n>>16)&255},${(n>>8)&255},${n&255},${a})`; }
+function drawOrb(x,y,colorIdx,rad){
+  const hex=PALETTE[colorIdx].hex;
+  // Ice attack: snowball ammo with a potent pulsing glow of its color (ball stays white)
+  if (isFrozen() && snowReady()){
+    const pulse = 0.5 + 0.5*Math.sin(performance.now()/170);
+    // pulsing outer glow (powerup feel)
+    const gr = ctx.createRadialGradient(x,y,rad*0.7, x,y,rad*1.9);
+    gr.addColorStop(0, hexA(hex,0));
+    gr.addColorStop(0.5, hexA(hex, 0.5*pulse));
+    gr.addColorStop(1, hexA(hex,0));
+    ctx.fillStyle=gr; ctx.beginPath(); ctx.arc(x,y,rad*1.9,0,Math.PI*2); ctx.fill();
+    // snowball sprite (stays white)
+    const img = snowImg(colorIdx);
+    if (img){ ctx.drawImage(img, x-rad, y-rad, rad*2, rad*2); }
+    else { ctx.beginPath(); ctx.arc(x,y,rad,0,Math.PI*2); ctx.fillStyle='#eef6ff'; ctx.fill(); }
+    // bold colored ring at the edge so the ball's color is unmistakable
+    const lw = Math.max(4, rad*0.26);
+    ctx.lineWidth = lw; ctx.strokeStyle = hex;
+    ctx.beginPath(); ctx.arc(x, y, rad - lw*0.30, 0, Math.PI*2); ctx.stroke();
+    ctx.lineWidth = 1.5; ctx.strokeStyle = shade(hex,-60);   // dark keyline for contrast on the snow
+    ctx.beginPath(); ctx.arc(x, y, rad + lw*0.20, 0, Math.PI*2); ctx.stroke();
+    return;
+  }
+  const g=ctx.createRadialGradient(x-rad*0.3,y-rad*0.3,rad*0.1,x,y,rad);
+  g.addColorStop(0,'#ffffff'); g.addColorStop(0.18,hex); g.addColorStop(1,shade(hex,-40));
+  ctx.beginPath(); ctx.arc(x,y,rad,0,Math.PI*2); ctx.fillStyle=g; ctx.fill();
+  ctx.lineWidth=2; ctx.strokeStyle='rgba(255,255,255,.35)'; ctx.stroke();
+}
+function shade(hex,amt){
+  let n=parseInt(hex.slice(1),16); let r=(n>>16)+amt,gg=((n>>8)&255)+amt,b=(n&255)+amt;
+  r=Math.max(0,Math.min(255,r)); gg=Math.max(0,Math.min(255,gg)); b=Math.max(0,Math.min(255,b));
+  return `rgb(${r},${gg},${b})`;
+}
+
+function drawLauncher(){
+  // aim preview
+  if (state==='play' && !ball){
+    const pts=previewPath();
+    ctx.strokeStyle='rgba(16,207,201,.55)'; ctx.lineWidth=2; ctx.setLineDash([4,8]);
+    ctx.beginPath(); ctx.moveTo(pts[0].x,pts[0].y);
+    for (const p of pts) ctx.lineTo(p.x,p.y);
+    ctx.stroke(); ctx.setLineDash([]);
+  }
+  // base
+  ctx.fillStyle='rgba(16,207,201,.12)';
+  ctx.beginPath(); ctx.arc(LAUNCH_X,LAUNCH_Y,BALL_R+3,0,Math.PI*2); ctx.fill();
+  // current orb
+  if (madnessActive()) drawGlitchBall(LAUNCH_X,LAUNCH_Y,BALL_R); else drawOrb(LAUNCH_X,LAUNCH_Y,cur,BALL_R);
+  // in-flight orb
+  if (ball){ if (ball.glitch) drawGlitchBall(ball.x,ball.y,BALL_R); else drawOrb(ball.x,ball.y,ball.color,BALL_R); }
+}
+
+function drawHUD(){
+  const hy=HUD_Y;
+  ctx.fillStyle='rgba(10,20,38,.82)'; ctx.fillRect(0,hy,W,HUD_H);
+  ctx.strokeStyle='rgba(16,207,201,.18)'; ctx.lineWidth=1;
+  ctx.beginPath(); ctx.moveTo(0,hy+.5); ctx.lineTo(W,hy+.5); ctx.stroke();
+
+  drawBrainBlast();
+  drawCoinMeter();
+}
+
+/* Score block — top-right corner: current score big (pixel font),
+   territory high below (the bar to beat for the next DORC color). */
+function drawSessionTimer(){
+  if (state!=='play' || !runStart) return;
+  const sec=Math.floor((performance.now()-runStart)/1000);
+  ctx.textAlign='center'; ctx.textBaseline='alphabetic';
+  ctx.fillStyle='#5f7799'; ctx.font="600 11px 'Inter'";
+  ctx.fillText('TIME', W/2, 26);
+  ctx.fillStyle='#cfe6ff'; ctx.font="18px 'Press Start 2P'";
+  ctx.fillText(fmtClock(sec), W/2, 52);
+  ctx.textAlign='left';
+}
+function drawScoreBox(){
+  const x = W - 26;
+  ctx.textAlign='right';
+  // current score, big, pixel font
+  ctx.fillStyle='#9fb4d0'; ctx.font="600 12px 'Inter'";
+  ctx.fillText('SCORE', x, 30);
+  ctx.fillStyle='#fff'; ctx.font="26px 'Press Start 2P'";
+  ctx.fillText(score.toLocaleString(), x, 66);
+  // territory high gate — label above the number, mirroring the score stack,
+  // smaller + purple so it blends into the neon-noir palette.
+  const hi = (player.territoryHigh && player.territoryHigh>0) ? player.territoryHigh : UNLOCK_FLOOR;
+  ctx.fillStyle='#9fb4d0'; ctx.font="600 10px 'Inter'";
+  ctx.fillText('DEMOFEST HIGH', x, 88);
+  ctx.fillStyle='#7C5CFF'; ctx.font="13px 'Press Start 2P'";
+  ctx.fillText(hi.toLocaleString(), x, 110);
+  ctx.textAlign='left';
+}
+
+/* Methodology coin collect meter: 5 pips that fill toward Madness. */
+function drawCoinMeter(){
+  // Methodology pill — mirrors the Brain Blast pill, in the gold/coin family
+  // so it reads as a sibling gauge but visually distinct.
+  const x=740, w=340, h=42, y=HUD_Y+33, cyq=y+h/2;
+  // While Madness Orbs are queued, collection is locked: show the warning state.
+  if (glitchBalls>0){ drawMethodologyWarning(x,y,w,h,cyq); return; }
+  const full = coinsCollected>=COINS_TO_TRIGGER;
+  const f = Math.max(0, Math.min(1, coinsCollected/COINS_TO_TRIGGER));
+
+  ctx.save();
+  if (full){ const pulse=0.5+0.5*Math.sin(performance.now()/220);
+    ctx.shadowColor=`rgba(255,200,70,${0.45+0.45*pulse})`; ctx.shadowBlur=26; }
+  const g=ctx.createLinearGradient(x,0,x+w,0);
+  if (full){ g.addColorStop(0,'#FFC846'); g.addColorStop(1,'#B87514'); }
+  else { g.addColorStop(0,'#2e2410'); g.addColorStop(1,'#241c12'); }
+  ctx.fillStyle=g; rr(x,y,w,h,h/2); ctx.fill();
+  ctx.restore();
+
+  if (!full && f>0){ ctx.save(); rr(x,y,w,h,h/2); ctx.clip();
+    const fg=ctx.createLinearGradient(x,0,x+w,0); fg.addColorStop(0,'#FFC846'); fg.addColorStop(1,'#8a6418');
+    ctx.globalAlpha=0.45; ctx.fillStyle=fg; ctx.fillRect(x,y,w*f,h); ctx.restore(); }
+
+  ctx.lineWidth=1.5; ctx.strokeStyle = full?'rgba(255,225,150,.85)':'rgba(255,200,70,.35)';
+  rr(x,y,w,h,h/2); ctx.stroke();
+
+  // coin token at left (matches the bolt's placement on Brain Blast)
+  const bx=x+26, by=cyq, cr=11;
+  const cg=ctx.createRadialGradient(bx-cr*0.3,by-cr*0.3,cr*0.1,bx,by,cr);
+  cg.addColorStop(0,'#FFF3C4'); cg.addColorStop(0.5,'#FFC846'); cg.addColorStop(1,'#A9760A');
+  ctx.fillStyle=cg; ctx.beginPath(); ctx.arc(bx,by,cr,0,Math.PI*2); ctx.fill();
+  ctx.lineWidth=1.5; ctx.strokeStyle='#7a5a08'; ctx.stroke();
+
+  // label + sublabel
+  const tx=x+48; ctx.textAlign='left'; ctx.textBaseline='middle';
+  ctx.fillStyle = full?'#06101f':'#f0d89a'; ctx.font="800 17px 'Inter'";
+  ctx.fillText(full?'MADNESS READY':'METHODOLOGY', tx, by-7);
+  ctx.fillStyle = full?'rgba(6,16,31,.8)':'#9a8557'; ctx.font="800 italic 10px 'Inter'";
+  ctx.fillText(full?'AUTO-DEPLOYING...':'COLLECT TO TRIGGER', tx, by+10);
+
+  // counter at right, Press Start 2P
+  ctx.textAlign='right';
+  ctx.font="16px 'Press Start 2P'";
+  ctx.fillStyle = full?'#FFF3C4':'#FFC846';
+  ctx.fillText(`${coinsCollected}/${COINS_TO_TRIGGER}`, x+w-22, by);
+  ctx.textAlign='left'; ctx.textBaseline='alphabetic';
+}
+
+function rr(x,y,w,h,rad){
+  ctx.beginPath();
+  if (ctx.roundRect){ ctx.roundRect(x,y,w,h,rad); return; }
+  const r=Math.min(rad,w/2,h/2);
+  ctx.moveTo(x+r,y); ctx.arcTo(x+w,y,x+w,y+h,r); ctx.arcTo(x+w,y+h,x,y+h,r);
+  ctx.arcTo(x,y+h,x,y,r); ctx.arcTo(x,y,x+w,y,r); ctx.closePath();
+}
+function drawBrainBlast(){
+  const r=BB_BTN, x=r.x, y=r.y, w=r.w, h=r.h, cyq=y+h/2;
+  const ready = bbReady(), cooling = bbCooldown>0;
+  const f = Math.max(0, Math.min(1, bbMeter/BB_TARGET));
+  const t = performance.now();
+
+  ctx.save();
+  // READY: calm steady glow (slow, well under any flash threshold) — no strobe
+  if (ready){ const pulse=0.5+0.5*Math.sin(t/600);   // ~0.8Hz, gentle
+    ctx.shadowColor=`rgba(124,92,255,${0.4+0.35*pulse})`; ctx.shadowBlur=22+10*pulse; }
+
+  // capsule body
+  const g=ctx.createLinearGradient(x,0,x+w,0);
+  if (ready){ g.addColorStop(0,'#13d7cf'); g.addColorStop(1,'#7C5CFF'); }
+  else { g.addColorStop(0,'#0e2a3a'); g.addColorStop(1,'#13243f'); }
+  ctx.fillStyle=g; rr(x,y,w,h,h/2); ctx.fill();
+  ctx.restore();
+
+  // loading fill overlay
+  if (!ready && f>0){
+    ctx.save(); rr(x,y,w,h,h/2); ctx.clip();
+    const fg=ctx.createLinearGradient(x,0,x+w,0); fg.addColorStop(0,'#10CFC9'); fg.addColorStop(1,'#3a6ea5');
+    ctx.globalAlpha=0.5; ctx.fillStyle=fg; ctx.fillRect(x,y,w*f,h); ctx.restore();
+  }
+
+  // base border
+  ctx.lineWidth=1.5; ctx.strokeStyle = ready?'rgba(180,150,255,.55)':'rgba(16,207,201,.35)';
+  rr(x,y,w,h,h/2); ctx.stroke();
+
+  // READY: a glowing segment that CHASES around the pill border (marquee), smooth motion
+  if (ready){
+    drawBlastMarquee(x,y,w,h, t);
+  }
+
+  // bolt token at left (steady, no flash)
+  const bx=x+24, by=cyq;
+  ctx.fillStyle='#FFC846';
+  ctx.font="700 20px 'Inter'"; ctx.textAlign='center'; ctx.textBaseline='middle';
+  ctx.fillText('\u26A1', bx, by+1);
+
+  // text
+  const tx=x+44; ctx.textAlign='left';
+  if (ready){
+    ctx.fillStyle='#06101f'; ctx.font="800 16px 'Inter'";
+    ctx.fillText('BRAIN BLAST!', tx, by-5);
+    ctx.fillStyle='rgba(6,16,31,.85)'; ctx.font="800 italic 9px 'Inter'";
+    ctx.fillText('CLICK TO DEPLOY', tx, by+9);
+  } else {
+    ctx.fillStyle='#dfe9f6'; ctx.font="800 15px 'Inter'";
+    ctx.fillText(cooling?'BRAIN BLAST':'BRAIN BLAST LOADING', tx, by-6);
+    ctx.fillStyle='#7d93b3'; ctx.font="800 italic 9px 'Inter'";
+    ctx.fillText('PLEASE STAND BY...', tx, by+9);
+  }
+
+  // counter, right-aligned in its reserved zone (steady — no flashing)
+  ctx.textAlign='right'; ctx.textBaseline='middle';
+  const cxr=x+w-18;
+  if (cooling){
+    ctx.fillStyle='#5f7799'; ctx.font="10px 'Press Start 2P'";
+    ctx.fillText(`${Math.ceil(bbCooldown/1000)}s`, cxr, by);
+  } else if (ready){
+    ctx.fillStyle='#06101f'; ctx.font="13px 'Press Start 2P'";
+    ctx.fillText(`${BB_TARGET}/${BB_TARGET}`, cxr, by);
+  } else {
+    ctx.fillStyle='#10CFC9'; ctx.font="13px 'Press Start 2P'";
+    ctx.fillText(`${Math.floor(bbMeter)}/${BB_TARGET}`, cxr, by);
+  }
+  ctx.textAlign='left'; ctx.textBaseline='alphabetic';
+}
+
+/* A bright glowing segment travelling smoothly around the pill's rounded-rect
+   border — slot-machine marquee, no flashing. ~1.6s per lap. */
+function drawBlastMarquee(x,y,w,h,t){
+  const rad=h/2, speed=1600;           // ms per lap
+  const prog=(t%speed)/speed;          // 0..1 around the perimeter
+  // approximate the capsule perimeter as a path and sample points along it
+  const segs=64, pts=[];
+  for(let i=0;i<segs;i++){
+    const u=i/segs, ang=u*Math.PI*2;
+    // capsule param: two straight runs + two semicircle caps, approximated by an ellipse-ish blend
+    // simple robust approach: trace the rounded rect with parametric corners
+    pts.push(capsulePoint(x,y,w,h,rad,u));
+  }
+  // draw a glowing comet of ~10 points trailing the head
+  ctx.save(); ctx.globalCompositeOperation='lighter';
+  const headIdx = Math.floor(prog*segs);
+  for(let k=0;k<12;k++){
+    const idx=((headIdx-k)%segs+segs)%segs;
+    const p=pts[idx]; const a=(1 - k/12);
+    ctx.globalAlpha=a*0.9; ctx.fillStyle = k<4 ? '#ffffff' : '#FFC846';
+    ctx.beginPath(); ctx.arc(p.x,p.y, 3.2*a+0.6, 0, Math.PI*2); ctx.fill();
+  }
+  ctx.restore(); ctx.globalAlpha=1;
+}
+/* point at fraction u (0..1) around a rounded-rect (capsule) border */
+function capsulePoint(x,y,w,h,rad,u){
+  const straight=w-2*rad;
+  const capLen=Math.PI*rad;            // each semicircle arc length
+  const total=2*straight+2*capLen;
+  let d=u*total;
+  // top edge L->R
+  if(d<straight){ return { x:x+rad+d, y:y }; }
+  d-=straight;
+  // right cap (top->bottom), semicircle
+  if(d<capLen){ const a=-Math.PI/2 + (d/capLen)*Math.PI; return { x:x+w-rad+Math.cos(a)*rad, y:y+rad+Math.sin(a)*rad }; }
+  d-=capLen;
+  // bottom edge R->L
+  if(d<straight){ return { x:x+w-rad-d, y:y+h }; }
+  d-=straight;
+  // left cap (bottom->top)
+  const a=Math.PI/2 + (d/capLen)*Math.PI; return { x:x+rad+Math.cos(a)*rad, y:y+rad+Math.sin(a)*rad };
+}
+
+/* Methodology pill, Madness-queued state: greyed, glitching, animated warning,
+   with pips showing remaining Madness Orbs (drain as they fire). */
+function drawMethodologyWarning(x,y,w,h,cyq){
+  const t=performance.now();
+  const jit=()=> (Math.random()*2-1)*1.6*barGlitch;
+  ctx.save();
+  // desaturated grey body with a faint volatile tint
+  const g=ctx.createLinearGradient(x,0,x+w,0);
+  g.addColorStop(0,'#1b2330'); g.addColorStop(1,'#232a36');
+  ctx.fillStyle=g; rr(x+jit(),y,w,h,h/2); ctx.fill();
+  // chromatic ghost edges (cheap RGB-split feel)
+  ctx.globalAlpha=0.35*barGlitch;
+  ctx.strokeStyle='#10CFC9'; ctx.lineWidth=1.5; rr(x-1.5*barGlitch,y,w,h,h/2); ctx.stroke();
+  ctx.strokeStyle='#FF2D9B'; rr(x+1.5*barGlitch,y,w,h,h/2); ctx.stroke();
+  ctx.globalAlpha=1;
+  ctx.lineWidth=1.5; ctx.strokeStyle='rgba(150,170,200,.35)'; rr(x,y,w,h,h/2); ctx.stroke();
+
+  // flickering warning triangle at left
+  const blink = (Math.sin(t/120)>-0.3);
+  const bx=x+26;
+  if (blink){
+    ctx.fillStyle=(Math.floor(t/100)%2)?'#FFC846':'#FF2D9B';
+    ctx.font="700 20px 'Inter'"; ctx.textAlign='center'; ctx.textBaseline='middle';
+    ctx.fillText('\u26A0', bx+jit(), cyq+1);
+  }
+  // label (glitch-jittered, with a faint ghost)
+  const tx=x+48; ctx.textAlign='left'; ctx.textBaseline='middle';
+  ctx.font="800 16px 'Inter'";
+  ctx.globalAlpha=0.4*barGlitch; ctx.fillStyle='#10CFC9'; ctx.fillText('MADNESS LOADED', tx-1.5*barGlitch, cyq-6+jit());
+  ctx.fillStyle='#FF2D9B'; ctx.fillText('MADNESS LOADED', tx+1.5*barGlitch, cyq-6+jit()); ctx.globalAlpha=1;
+  ctx.fillStyle='#e7edf5'; ctx.fillText('MADNESS LOADED', tx+jit(), cyq-6);
+  ctx.fillStyle='#8a98ab'; ctx.font="800 italic 10px 'Inter'";
+  ctx.fillText('FIRE TO CLEAR', tx, cyq+10);
+
+  // remaining-orb pips at right (drain as fired)
+  const pipR=5, gap=15, n=5, px0=x+w-22-(n-1)*gap;
+  for (let i=0;i<n;i++){ const px=px0+i*gap, on=i<glitchBalls;
+    ctx.beginPath(); ctx.arc(px,cyq,pipR,0,Math.PI*2);
+    if (on){ ctx.fillStyle=(Math.floor(t/90+i)%2)?'#10CFC9':'#FF2D9B'; ctx.fill(); }
+    else { ctx.fillStyle='rgba(150,170,200,.12)'; ctx.fill();
+      ctx.lineWidth=1; ctx.strokeStyle='rgba(150,170,200,.3)'; ctx.stroke(); }
+  }
+  ctx.restore();
+  ctx.textAlign='left'; ctx.textBaseline='alphabetic';
+}
+
+/* Cheap bar-wide glitch overlay: scanlines + RGB tear slivers across the HUD bar.
+   Gated to barGlitch>0 so it costs nothing during normal play. */
+function drawBarGlitch(){
+  if (barGlitch<=0.01) return;
+  const y=HUD_Y, h=HUD_H, a=barGlitch;
+  ctx.save();
+  // scanlines
+  ctx.globalAlpha=0.10*a; ctx.fillStyle='#000';
+  for (let yy=y; yy<y+h; yy+=3) ctx.fillRect(0,yy,W,1);
+  // RGB tear slivers (occasional)
+  const tears=Math.round(3*a);
+  for (let i=0;i<tears;i++){
+    const ty=y+Math.random()*h, th=1+Math.random()*3;
+    ctx.globalAlpha=0.10*a; ctx.fillStyle=Math.random()<0.5?'#10CFC9':'#FF2D9B';
+    ctx.fillRect(0,ty,W,th);
+  }
+  // chromatic top/bottom edge offset on the bar line
+  ctx.globalAlpha=0.18*a;
+  ctx.fillStyle='#10CFC9'; ctx.fillRect(0,y-1*a,W,1);
+  ctx.fillStyle='#FF2D9B'; ctx.fillRect(0,y+1*a,W,1);
+  ctx.restore(); ctx.globalAlpha=1;
+}
+
+function drawDangerVignette(){
+  // panic glow when bubbles near the line
+  let near=0;
+  for (let r=grid.length-1;r>=0;r--){ for (let c=0;c<grid[r].length;c++){ if (grid[r][c]){ near=Math.max(near, cellY(r)+R); } } }
+  let prox=Math.max(0,Math.min(1,(near-(DANGER_Y-160))/160));
+  if (state==='play' && freezeAmt>0) prox *= (1 - 0.75*freezeAmt);   // panic glow eases down as ice forms
+  if (prox<=0) return;
+  const vg=ctx.createRadialGradient(W/2,H/2,H*0.3,W/2,H/2,H*0.75);
+  vg.addColorStop(0,'rgba(184,49,49,0)'); vg.addColorStop(1,`rgba(184,49,49,${0.45*prox})`);
+  ctx.fillStyle=vg; ctx.fillRect(0,0,W,H);
+}
+
+function render(){
+  ctx.clearRect(0,0,W,H);
+  drawBackground();
+  drawBoardFrame();
+  // FREEZE: only the frost crystals — screen blend keeps the dark background dark (no grey wash)
+  if (freezeAmt > 0.001 && state==='play'){
+    const fv=freezeVid();
+    if (fv && fv.readyState>=2){
+      ctx.save();
+      ctx.globalCompositeOperation='screen';          // video's black bg stays transparent; just the frost lifts
+      ctx.globalAlpha = 0.95*freezeAmt;
+      ctx.drawImage(fv,0,0,W,HUD_Y);
+      ctx.restore();
+    }
+  }
+  drawBubbles();
+  if (madnessActive()) drawMadnessStatic();
+  drawDangerVignette();
+  drawLauncher();                                       // ball + DORCs sit on top of the frost
+  if (flash>0){ ctx.fillStyle=`rgba(16,207,201,${0.25*flash})`; ctx.fillRect(0,0,W,HUD_Y); }
+  drawHUD();
+  drawScoreBox();
+  drawBarGlitch();
+  drawSessionTimer();
+}
+
+/* ============================================================================
+   LOOP
+   ============================================================================ */
+let last=performance.now();
+function loop(now){
+  const dt=Math.min(0.05,(now-last)/1000); last=now;
+  fps = dt>0 ? Math.round(1/dt) : fps;
+  if (!paused) update(dt, now);
+  render();
+  if (showDebug){ drawConnectivity(); drawDebug(); }
+  requestAnimationFrame(loop);
+}
+
+function drawConnectivity(){
+  // anchored floodfill from row 0 — identical logic to dropFloaters()
+  const seen=new Set(), key=(a,b)=>a+'_'+b, stack=[];
+  for (let c=0;c<rowLen(0);c++){ if (grid[0]&&grid[0][c]){ seen.add(key(0,c)); stack.push([0,c]); } }
+  while(stack.length){ const [r,c]=stack.pop();
+    for (const [nr,nc] of neighbors(r,c)){ if(seen.has(key(nr,nc)))continue; if(grid[nr]&&grid[nr][nc]){ seen.add(key(nr,nc)); stack.push([nr,nc]); } } }
+  ctx.save();
+  // adjacency edges between filled neighbors (each edge once)
+  ctx.lineWidth=1.5; ctx.strokeStyle='rgba(120,255,176,.45)';
+  for (let r=0;r<grid.length;r++) for (let c=0;c<grid[r].length;c++){
+    if(!grid[r][c]) continue; const x=cellX(r,c), y=cellY(r);
+    for (const [nr,nc] of neighbors(r,c)){
+      if(grid[nr]&&grid[nr][nc] && (nr>r || (nr===r&&nc>c))){
+        ctx.beginPath(); ctx.moveTo(x,y); ctx.lineTo(cellX(nr,nc),cellY(nr)); ctx.stroke();
+      }
+    }
+  }
+  // rings: green = anchored to ceiling, red = would drop as a floater
+  for (let r=0;r<grid.length;r++) for (let c=0;c<grid[r].length;c++){
+    if(!grid[r][c]) continue; const x=cellX(r,c), y=cellY(r), anc=seen.has(key(r,c));
+    ctx.lineWidth = anc?2:4; ctx.strokeStyle = anc?'rgba(120,255,176,.9)':'#ff2d2d';
+    ctx.beginPath(); ctx.arc(x,y,R*0.7,0,Math.PI*2); ctx.stroke();
+  }
+  ctx.restore();
+}
+function drawDebug(){
+  const lines=[
+    `state ${state}${paused?' [PAUSED]':''}`,
+    `fps ${fps}`,
+    `grid rows ${grid.length}`,
+    `scrollY ${scrollY.toFixed(1)}`,
+    `descentSpeed ${descentSpeed.toFixed(2)} px/s`,
+    `rows spawned ${rowsSpawned}`,
+    `balls fired ${ballsFired}`,
+    `last pop ${lastPop}`,
+    `ball ${ball?'in flight':'ready'}`,
+  ];
+  ctx.save();
+  ctx.font="12px 'Press Start 2P'"; ctx.textAlign='left';
+  let y=44;
+  ctx.fillStyle='rgba(0,0,0,.55)'; ctx.fillRect(8,30,240,lines.length*18+12);
+  ctx.fillStyle='#7CFFB0';
+  for (const l of lines){ ctx.fillText(l,16,y+10); y+=18; }
+  ctx.restore();
+}
+
+/* ============================================================================
+   INPUT
+   ============================================================================ */
+function frameToInternal(e){
+  const rect=cv.getBoundingClientRect();
+  const sx=W/rect.width, sy=H/rect.height;
+  return { x:(e.clientX-rect.left)*sx, y:(e.clientY-rect.top)*sy };
+}
+cv.addEventListener('mousemove', e=>{
+  const p=frameToInternal(e);
+  let a=Math.atan2(p.y-LAUNCH_Y, p.x-LAUNCH_X);
+  // clamp to upward arc
+  const min=-Math.PI*0.92, max=-Math.PI*0.08;
+  if (a> max) a=max; if (a< min) a=min;
+  aimAngle=a;
+});
+cv.addEventListener('click', e=>{
+  if (state==='play' && bbReady()){
+    const p=frameToInternal(e), r=BB_BTN;
+    if (p.x>=r.x && p.x<=r.x+r.w && p.y>=r.y && p.y<=r.y+r.h){ startBlast(); return; }
+  }
+  fire();
+});
+window.addEventListener('keydown', e=>{
+  if (e.code==='Space'){ e.preventDefault(); fire(); }
+  if (e.code==='KeyP' || e.code==='Escape'){ togglePauseMenu(); }
+  if (e.code==='KeyD'){ showDebug=!showDebug; }
+  if (e.code==='KeyM' && state==='play'){ triggerMadness(); }              // DEBUG: force the Madness wheel
+  if (e.code==='KeyC' && state==='play'){ coinsCollected=Math.min(COINS_TO_TRIGGER,coinsCollected+1); }  // DEBUG: +1 coin
+});
+
+/* ============================================================================
+   PARENT HANDSHAKE
+   ============================================================================ */
+window.addEventListener('message', e=>{
+  const d=e.data||{};
+  // The room left the Play view — void whatever was running. Without this the
+  // game kept descending and playing audio behind the room.
+  if (d.type==='BLITZ_ABANDON'){ abandonRun(); return; }
+  if (d.type==='BLITZ_INIT'){
+    player.trigram=d.trigram||null; player.territory=d.territory||null;
+    player.country_code=d.country_code||null; player.lifetime=Number(d.lifetime)||0;
+    player.signedIn=!!d.trigram;
+    player.territoryHigh = Number(d.territoryHigh)||0;
+    document.getElementById('ident').innerHTML = player.signedIn
+      ? `SIGNED IN · <b>${player.trigram}</b>` : 'PRACTICE MODE';
+  }
+});
+// tell the parent we're ready to receive INIT
+if (window.parent!==window) window.parent.postMessage({type:'BLITZ_READY'}, '*');
+
+/* ============================================================================
+   START / RESIZE / GUARD
+   ============================================================================ */
+function fitStage(){
+  // measure the live layout box, not window.inner* — embed hosts (Mindtickle)
+  // can settle the iframe size without a resize event reaching this window
+  const de = document.documentElement;
+  const sw = de.clientWidth  || window.innerWidth;
+  const sh = de.clientHeight || window.innerHeight;
+  const scale=Math.min(sw/W, sh/H);
+  document.getElementById('frame').style.transform=`scale(${scale})`;
+  // guard: too small or portrait
+  const tooSmall = sw < 640 || sh < 330 || sw < sh;   // 330: landscape phones inside in-app browsers (chrome eats ~50px)
+  document.getElementById('guard').style.display = tooSmall ? 'flex' : 'none';
+}
+function toggleFullscreen(){
+  if (document.fullscreenElement) document.exitFullscreen().catch(function(){});
+  else document.documentElement.requestFullscreen().catch(function(){});
+}
+(function(){
+  var b = document.getElementById('fsBtn');
+  if (!document.fullscreenEnabled){ b.style.display = 'none'; return; }   // host chain blocks it
+  document.addEventListener('fullscreenchange', function(){
+    var fs = !!document.fullscreenElement;
+    document.getElementById('fsIcoEnter').style.display = fs ? 'none' : '';
+    document.getElementById('fsIcoExit').style.display  = fs ? '' : 'none';
+    fitStage();
+  });
+})();
+window.addEventListener('resize', fitStage);
+if (window.visualViewport) window.visualViewport.addEventListener('resize', fitStage);
+try{ new ResizeObserver(function(){ fitStage(); }).observe(document.documentElement); }catch(e){}
+fitStage(); setTimeout(fitStage,300); setTimeout(fitStage,1200); setTimeout(fitStage,3000);
+
+/* ============================ TUTORIAL ============================== */
+(function tutorialInit(){
+  const overlay = document.getElementById('tutorial');
+  const howBtn  = document.getElementById('howBtn');
+  const closeBtn= document.getElementById('tutClose');
+  if (!overlay || !howBtn) return;
+
+  const pages = [...overlay.querySelectorAll('.tut-page')];
+  const prev  = document.getElementById('tutPrev');
+  const next  = document.getElementById('tutNext');
+  const dotsEl= document.getElementById('tutDots');
+  let page = 0, iconRAF = 0;
+
+  // page dots
+  dotsEl.innerHTML = pages.map((_,i)=>`<span class="${i===0?'on':''}"></span>`).join('');
+  const dots = [...dotsEl.children];
+
+  function show(p){
+    page = Math.max(0, Math.min(pages.length-1, p));
+    pages.forEach((el,i)=> el.classList.toggle('active', i===page));
+    dots.forEach((d,i)=> d.classList.toggle('on', i===page));
+    prev.disabled = page===0;
+    next.disabled = page===pages.length-1;
+  }
+  prev.addEventListener('click', ()=>show(page-1));
+  next.addEventListener('click', ()=>show(page+1));
+
+  function openTut(){ overlay.classList.add('show'); show(0); startIcons(); }
+  function closeTut(){ overlay.classList.remove('show'); cancelAnimationFrame(iconRAF); }
+  howBtn.addEventListener('click', openTut);
+  closeBtn.addEventListener('click', closeTut);
+  overlay.addEventListener('click', e => { if (e.target === overlay) closeTut(); });
+
+  // ---- animated power-up icons (reuse the game's real frame logic) ----
+  const fz = document.getElementById('powFreeze');
+  const bl = document.getElementById('powBlast');
+  const coin = document.getElementById('powCoin');
+  const mad = document.getElementById('powMadness');
+  const fzc = fz && fz.getContext('2d');
+  const blc = bl && bl.getContext('2d');
+  const coinc = coin && coin.getContext('2d');
+  const madc = mad && mad.getContext('2d');
+  const demo = document.getElementById('tutDemo');
+  const dctx = demo && demo.getContext('2d');
+  const DEMO_COLORS = ['blue','green','red','yellow','purple','teal','orange','pink'];
+  let di = 0, dstate='fly', dt=0, dball={y:0}, dframe=0;
+  function demoReset(){ dball.y = demo.height-22; dstate='fly'; dt=0; dframe=Math.random()*48|0; }
+  function demoBlitDorc(id,x,y,sz){
+    const sh = sheets[id] && (sheets[id]['grin']||sheets[id]['goof']||sheets[id]['scared']);
+    if (sh && sh.ok){ const sc=(dframe|0)%SHEET_COLS, sr=Math.floor((dframe|0)/SHEET_COLS);
+      dctx.drawImage(sh.img, sc*CELL, sr*CELL, CELL, CELL, x-sz/2, y-sz/2, sz, sz);
+    } else { const hex=(PALETTE.find(p=>p.id===id)||PALETTE[0]).hex;
+      dctx.fillStyle=hex; dctx.beginPath(); dctx.arc(x,y,sz/2*0.9,0,Math.PI*2); dctx.fill();
+      dctx.fillStyle='rgba(0,0,0,.85)';
+      dctx.beginPath(); dctx.arc(x-sz*0.13,y-sz*0.04,sz*0.07,0,Math.PI*2); dctx.fill();
+      dctx.beginPath(); dctx.arc(x+sz*0.13,y-sz*0.04,sz*0.07,0,Math.PI*2); dctx.fill(); }
+  }
+  function drawDemo(){
+    if (!dctx) return;
+    const W=demo.width, H=demo.height, id=DEMO_COLORS[di], SZ=42, cx=W/2;
+    dctx.clearRect(0,0,W,H);
+    dframe=(dframe+0.3)%48;
+    // aim guide
+    dctx.strokeStyle='rgba(16,207,201,.22)'; dctx.setLineDash([3,5]); dctx.lineWidth=1;
+    dctx.beginPath(); dctx.moveTo(cx,H-22); dctx.lineTo(cx,46); dctx.stroke(); dctx.setLineDash([]);
+    const tx=[cx-22, cx+22], ty=40;
+    if (dstate==='fly'){
+      tx.forEach(x=>demoBlitDorc(id,x,ty,SZ));
+      // orb — normal fired look: a colored sphere matching the cluster color
+      // (NOT the white snowball, which is only the Brain Freeze form).
+      const ohex=(PALETTE.find(p=>p.id===id)||PALETTE[0]).hex, orad=13;
+      const og=dctx.createRadialGradient(cx-orad*0.3,dball.y-orad*0.3,orad*0.1,cx,dball.y,orad);
+      og.addColorStop(0,'#ffffff'); og.addColorStop(0.18,ohex); og.addColorStop(1,shade(ohex,-40));
+      dctx.beginPath(); dctx.arc(cx,dball.y,orad,0,Math.PI*2); dctx.fillStyle=og; dctx.fill();
+      dctx.lineWidth=2; dctx.strokeStyle='rgba(255,255,255,.35)'; dctx.stroke();
+      dball.y -= 1.8;
+      if (dball.y <= ty+SZ*0.4){ dstate='pop'; dt=0; }
+    } else {
+      const k=Math.max(0,1-dt/20);
+      tx.forEach(x=>{ if(k>0) demoBlitDorc(id,x,ty,SZ*k); });
+      for(let i=0;i<8;i++){ const a=i/8*Math.PI*2, r=(20-dt)*1.6;
+        dctx.globalAlpha=k; dctx.fillStyle=(PALETTE.find(p=>p.id===id)||PALETTE[0]).hex;
+        dctx.fillRect(cx+Math.cos(a)*r, ty+Math.sin(a)*r, 3,3); dctx.globalAlpha=1; }
+      dt++;
+      if (dt>40){ di=(di+1)%DEMO_COLORS.length; demoReset(); }   // hold the cleared state longer   // cycle to next color
+    }
+    dctx.font="600 11px 'Inter',sans-serif"; dctx.fillStyle='#7d93b3'; dctx.textAlign='center';
+    dctx.fillText('Match 2+ same color to clear', cx, H-7);
+  }
+
+  function drawFreezeIcon(){
+    if (!fzc) return;
+    fzc.clearRect(0,0,fz.width,fz.height);
+    const d=88, x=fz.width/2, y=fz.height/2;
+    if (brainFreeze && brainFreeze.ok){
+      const fr=bfFrame(), sc=fr%BF_COLS, sr=Math.floor(fr/BF_COLS);   // same crop as drawBrainFreeze
+      fzc.drawImage(brainFreeze.img, sc*BF_CELL, sr*BF_CELL, BF_CELL, BF_CELL, x-d/2, y-d/2, d, d);
+    } else {
+      // "?" fallback orb
+      fzc.fillStyle='#9ad7ff'; fzc.beginPath(); fzc.arc(x,y,d/2*0.9,0,Math.PI*2); fzc.fill();
+      fzc.fillStyle='#06101f'; fzc.font="700 30px 'Press Start 2P',monospace"; fzc.textAlign='center'; fzc.textBaseline='middle';
+      fzc.fillText('?',x,y+2);
+    }
+  }
+  function drawBlastIcon(){
+    if (!blc) return;
+    blc.clearRect(0,0,bl.width,bl.height);
+    // static copy of the in-HUD BRAIN BLAST button in its READY look
+    const bx=8, by=24, bw=bl.width-16, bh=26, cx=bl.width/2;
+    blc.textAlign='center';
+    blc.fillStyle='#9fb4d0'; blc.font="700 12px 'Inter',sans-serif";
+    blc.fillText('BRAIN BLAST', cx, 16);
+    const pulse=0.5+0.5*Math.sin(performance.now()/200);
+    blc.save(); blc.shadowColor=`rgba(124,92,255,${0.4+0.5*pulse})`; blc.shadowBlur=18;
+    const g=blc.createLinearGradient(bx,0,bx+bw,0); g.addColorStop(0,'#10CFC9'); g.addColorStop(1,'#7C5CFF');
+    blc.fillStyle=g; const r=8;
+    blc.beginPath(); blc.moveTo(bx+r,by); blc.arcTo(bx+bw,by,bx+bw,by+bh,r); blc.arcTo(bx+bw,by+bh,bx,by+bh,r);
+    blc.arcTo(bx,by+bh,bx,by,r); blc.arcTo(bx,by,bx+bw,by,r); blc.closePath(); blc.fill(); blc.restore();
+    blc.fillStyle='#06101f'; blc.font="800 15px 'Inter',sans-serif";
+    blc.fillText('&#9889; BRAIN BLAST READY', cx, by+bh/2+5);
+  }
+  function drawCoinIcon(){
+    if (!coinc) return;
+    coinc.clearRect(0,0,coin.width,coin.height);
+    const d=88, x=coin.width/2, y=coin.height/2, r=d/2*0.94, t=performance.now()/1000;
+    const sx=Math.abs(Math.cos(t*3.2));   // same spin fake as drawCoinOrb
+    const g=coinc.createRadialGradient(x-r*0.3,y-r*0.3,4,x,y,r);
+    g.addColorStop(0,'#FFF3C4'); g.addColorStop(.5,'#FFC846'); g.addColorStop(1,'#A9760A');
+    coinc.save(); coinc.translate(x,y); coinc.scale(Math.max(0.18,sx),1);
+    coinc.fillStyle=g; coinc.beginPath(); coinc.arc(0,0,r,0,Math.PI*2); coinc.fill();
+    coinc.restore();
+    if (sx>0.35){ coinc.fillStyle='#7a5a08'; coinc.font="bold 24px 'Inter',sans-serif";
+      coinc.textAlign='center'; coinc.textBaseline='middle'; coinc.fillText('M',x,y); }
+  }
+  function drawMadnessIcon(){
+    if (!madc) return;
+    madc.clearRect(0,0,mad.width,mad.height);
+    const x=mad.width/2, y=mad.height/2, rad=40;
+    // RGB-split glitch orb (matches the glitch ball vibe)
+    const j=()=> (Math.random()*2-1)*3;
+    madc.globalAlpha=.85;
+    madc.fillStyle='#10CFC9'; madc.beginPath(); madc.arc(x-3+j(),y+j(),rad,0,Math.PI*2); madc.fill();
+    madc.fillStyle='#FF2D9B'; madc.beginPath(); madc.arc(x+3+j(),y+j(),rad,0,Math.PI*2); madc.fill();
+    madc.globalAlpha=1; madc.fillStyle='#0a1018'; madc.beginPath(); madc.arc(x,y,rad-3,0,Math.PI*2); madc.fill();
+    for(let i=0;i<3;i++){ const sy=y-rad+Math.random()*rad*2;
+      madc.fillStyle=Math.random()<.5?'#10CFC9':'#FF2D9B'; madc.fillRect(x-rad,sy,rad*2,2); }
+    madc.lineWidth=2; madc.strokeStyle='#7C5CFF'; madc.beginPath(); madc.arc(x,y,rad,0,Math.PI*2); madc.stroke();
+  }
+
+  function iconLoop(){
+    if (page===0){ drawDemo(); }
+    else if (page===1){ drawFreezeIcon(); drawBlastIcon(); }
+    else if (page===2){ drawCoinIcon(); drawMadnessIcon(); }
+    iconRAF = requestAnimationFrame(iconLoop);
+  }
+  function startIcons(){ cancelAnimationFrame(iconRAF); if(dctx){ di=0; demoReset(); } iconLoop(); }
+})();
+
+/* ---- game-over helpers ---- */
+function fmtClock(sec){ const m=Math.floor(sec/60), s=sec%60; return m+':'+String(s).padStart(2,'0'); }
+function countUp(el, target, ms){
+  const t0=performance.now();
+  (function tick(){
+    const p=Math.min(1,(performance.now()-t0)/ms);
+    const e=1-Math.pow(1-p,3);   // easeOutCubic
+    el.textContent = Math.round(target*e).toLocaleString();
+    if (p<1) requestAnimationFrame(tick); else el.textContent=target.toLocaleString();
+  })();
+}
+let overFxRAF=0;
+function startOverFx(big){
+  const cv=document.getElementById('overFx'); if(!cv) return;
+  const c=cv.getContext('2d'); const W2=cv.width, H2=cv.height;
+  cancelAnimationFrame(overFxRAF);
+  const parts=[]; const colors=['#10CFC9','#FF2D9B','#7C5CFF','#FFC846'];
+  const bursts = big?7:4;
+  function firework(x,y){
+    const col=colors[Math.floor(Math.random()*colors.length)];
+    for(let i=0;i<34;i++){ const a=Math.random()*Math.PI*2, sp=1.5+Math.random()*4;
+      parts.push({x,y,vx:Math.cos(a)*sp,vy:Math.sin(a)*sp,life:1,col}); }
+  }
+  let n=0, next=0;
+  const t0=performance.now();
+  (function tick(){
+    const t=performance.now()-t0;
+    c.clearRect(0,0,W2,H2);
+    // occasional scanline glitch wash
+    if(Math.random()<0.25){ c.globalAlpha=0.05; c.fillStyle=Math.random()<.5?'#10CFC9':'#FF2D9B';
+      c.fillRect(0,Math.random()*H2,W2,2); c.globalAlpha=1; }
+    if(t>next && n<bursts){ firework(W2*(0.2+Math.random()*0.6), H2*(0.18+Math.random()*0.4)); n++; next=t+260+Math.random()*340; }
+    for(let i=parts.length-1;i>=0;i--){ const p=parts[i];
+      p.x+=p.vx; p.y+=p.vy; p.vy+=0.06; p.life-=0.016;
+      if(p.life<=0){ parts.splice(i,1); continue; }
+      c.globalAlpha=Math.max(0,p.life); c.fillStyle=p.col;
+      c.fillRect(p.x,p.y,3,3); }
+    c.globalAlpha=1;
+    if(n<bursts || parts.length>0) overFxRAF=requestAnimationFrame(tick);
+  })();
+}
+
+/* ---- Arcade high-scores table ---- */
+(function scoresInit(){
+  const overlay=document.getElementById('scores');
+  const tabsEl=document.getElementById('scTabs');
+  const listEl=document.getElementById('scList');
+  const TERR=['DEMOFEST'];
+  let data=null, activeTab=null;
+
+  function fmtT(sec){ if(!sec) return '\u2014'; const m=Math.floor(sec/60), s=sec%60; return m+':'+String(s).padStart(2,'0'); }
+
+  function renderTabs(){
+    const home=player.territory;
+    tabsEl.innerHTML = TERR.map(t=>{
+      const cls=['sc-tab']; if(t===home) cls.push('home'); if(t===activeTab) cls.push('active');
+      return `<button class="${cls.join(' ')}" data-t="${t}">${t}</button>`;
+    }).join('');
+    [...tabsEl.children].forEach(b=> b.addEventListener('click', ()=>{ activeTab=b.dataset.t; renderTabs(); renderList(); }));
+  }
+  function renderList(){
+    const rows=(data && data.territories && data.territories[activeTab]) || [];
+    if(!rows.length){ listEl.innerHTML='<div class="sc-empty">No Demofest scores yet. Be the first!</div>'; return; }
+    const me=player.signedIn?player.trigram:null;
+    listEl.innerHTML = rows.map((r,i)=>{
+      const mine = r.trigram===me ? ' me' : '';
+      const flag = r.country_code
+        ? `<img src="https://flagcdn.com/h24/${r.country_code}.png" onerror="this.style.visibility='hidden'">`
+        : '';
+      return `<div class="sc-row${mine}"><span class="sc-rank">${i+1}</span>`+
+             `<span class="sc-tri">${r.trigram}</span>`+
+             `<span class="sc-flag">${flag}</span>`+
+             `<span class="sc-hi">${(r.high||0).toLocaleString()}</span>`+
+             `<span class="sc-time">${fmtT(r.longestSec)}</span></div>`;
+    }).join('');
+    // scroll the player's row into view ONLY if the list actually overflows
+    // (otherwise scrollIntoView yanks the whole overlay on short lists)
+    const meRow=listEl.querySelector('.sc-row.me');
+    if(meRow && listEl.scrollHeight > listEl.clientHeight + 8){
+      const rt=meRow.offsetTop - listEl.clientHeight/2 + meRow.clientHeight/2;
+      listEl.scrollTop = Math.max(0, rt);
+    }
+  }
+
+  async function openScores(){
+    overlay.classList.add('show');
+    activeTab = 'DEMOFEST';
+    tabsEl.innerHTML=''; listEl.innerHTML='<div class="sc-empty">Loading scores\u2026</div>';
+    try{
+      const res=await fetch(API_BASE+'getScores');
+      data = res.ok ? await res.json() : { territories:{} };
+    }catch(e){ data={ territories:{} }; }
+    renderTabs(); renderList();
+  }
+  function closeScores(){ overlay.classList.remove('show'); }
+
+  document.getElementById('scoresBtn').addEventListener('click', openScores);
+  document.getElementById('scClose').addEventListener('click', closeScores);
+  overlay.addEventListener('click', e=>{ if(e.target===overlay) closeScores(); });
+})();
+
+document.getElementById('playBtn').addEventListener('click', startGame);
+document.getElementById('againBtn').addEventListener('click', ()=>{
+  document.getElementById('over').style.display='none'; startGame();
+});
+
+/* pause-menu volume sliders */
+(function(){
+  const vm=document.getElementById('volMusic'), vs=document.getElementById('volSfx');
+  const vmL=document.getElementById('valMusic'), vsL=document.getElementById('valSfx');
+  vm.value=Math.round(AUDIO.musicVol*100); vmL.textContent=vm.value;
+  vs.value=Math.round(AUDIO.sfxVol*100);   vsL.textContent=vs.value;
+  vm.addEventListener('input', e=>{ AUDIO.musicVol=e.target.value/100; vmL.textContent=e.target.value;
+    if (musicGain) applyMusicGain(0.05); else if (AUDIO.bgm) AUDIO.bgm.volume=AUDIO.musicVol; saveVols(); });
+  vs.addEventListener('input', e=>{ AUDIO.sfxVol=e.target.value/100; vsL.textContent=e.target.value;
+    hzSetVol(); if(AUDIO.voice) AUDIO.voice.volume=AUDIO.sfxVol; if(freezeBg) freezeBg.volume=AUDIO.sfxVol*FREEZE_BG_VOL; saveVols(); });
+  document.getElementById('resumeBtn').addEventListener('click', togglePauseMenu);
+})();
+
+updateAudioIcons();
+requestAnimationFrame(loop);
+</script>
+</body>
+</html>

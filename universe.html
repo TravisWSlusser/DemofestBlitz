@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>The Stellar-Seller Universe</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&family=Press+Start+2P&display=swap" rel="stylesheet">
+<style>
+  :root{ --ground:#06101C; --ink:#E7EBEF; --muted:#9AA6B2; --gold:#F5C542; }
+  *{ box-sizing:border-box; margin:0; padding:0 }
+  html,body{ height:100% }
+  body{ background:var(--ground); color:var(--ink); font-family:Inter,system-ui,sans-serif; display:flex; flex-direction:column }
+  nav{ display:flex; justify-content:space-between; align-items:center; padding:16px 22px }
+  nav a{ color:var(--muted); text-decoration:none; font-weight:700 }
+  nav a:hover{ color:var(--ink) }
+  nav .k{ font-family:'Press Start 2P',monospace; font-size:12px; color:var(--gold) }
+  main{ flex:1; display:flex; flex-direction:column; align-items:center; justify-content:center; text-align:center; padding:24px }
+  h1{ font-family:'Press Start 2P',monospace; font-size:clamp(20px,3.2vw,40px); line-height:1.35; color:var(--gold); max-width:20ch; text-wrap:balance }
+  p{ margin-top:20px; color:var(--muted); max-width:52ch; font-size:1.1rem }
+  .slot{ margin-top:34px; width:min(900px,92vw); aspect-ratio:16/9; border:2px dashed rgba(245,197,66,.45); border-radius:16px;
+         display:flex; align-items:center; justify-content:center; color:var(--muted); font-size:.95rem }
+</style>
+</head>
+<body>
+  <nav>
+    <a href="index.html">&larr; Start over</a>
+    <span class="k">THE STELLAR-SELLER UNIVERSE</span>
+    <a href="play.html">Play Blitz &rarr;</a>
+  </nav>
+  <main>
+    <h1>Explore the Stellar-Seller Universe</h1>
+    <p>Placeholder. Comic panels, the character lineup, the Mission Control and REC Room walkthrough — whatever you want people at the table to see goes here.</p>
+    <div class="slot">[ your content here ]</div>
+  </main>
+  <script src="assets/kiosk.js"></script>
+  <script>
+    // Longer leash than the arcade: people read this one. Tune here.
+    const IDLE_MS = 60000, PROMPT_MS = 10000;
+    Kiosk.start({ idleMs: IDLE_MS, promptMs: PROMPT_MS });
+  </script>
+</body>
+</html>
