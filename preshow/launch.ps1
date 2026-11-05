@@ -1,6 +1,7 @@
 ﻿<#
   Side-Qlik pre-show launcher (Windows, PowerShell 5.1).
 
+  0. Shows a start screen with two buttons: AUDIO TEST and LAUNCH PRE SHOW.
   1. Starts the deck's slideshow and holds it on PowerPoint's black screen.
   2. Puts a kiosk Chrome window with the pre-show page on the same monitor, on top of it.
   3. At show time the page fades to black and Chrome is closed. PowerPoint's black screen is underneath,
@@ -19,6 +20,7 @@ param(
   [string]$Music  = '',                         # folder of background music; empty = the "music" folder next to this script
   [double]$MusicVolume = 0.5,                   # 0 to 1, on top of the laptop's own volume
   [switch]$NoVoice,                             # turn the announcer off
+  [switch]$NoMenu,                              # skip the start screen and launch straight away
   [double]$VoiceVolume = 1.0,                   # 0 to 1
   [switch]$Nudge                                # OFF by default. The laptop's policy locks the screen after 10 idle minutes. The script
                                                 # already asks Windows to keep the display on, the way a video player does. If a rehearsal
@@ -44,6 +46,110 @@ function Retry([scriptblock]$do, [int]$tries = 40) {           # PowerPoint answ
 }
 Set-Content -Path $log -Value "Pre-show run $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')"
 
+# ---- the start screen. Two buttons, in the deck's own dress:
+#   AUDIO TEST       plays a music track and the announcer over it, the way the pre-show will sound, so the room's
+#                    volume can be set before anyone is listening. Press again to stop.
+#   LAUNCH PRE SHOW  closes this window and starts the pre-show. A "+10" show time starts counting from this press.
+# Esc closes the window without starting anything. Returns 'launch' or 'cancel'.
+function Show-StartScreen([string]$deckName, [string]$whenText, [object[]]$tracks, [string]$site, [double]$musicVol, [double]$voiceVol) {
+  Add-Type -AssemblyName System.Windows.Forms, System.Drawing, PresentationCore, WindowsBase
+  $green = [System.Drawing.Color]::FromArgb(0, 176, 80); $dark = [System.Drawing.Color]::FromArgb(11, 14, 15)
+  $white = [System.Drawing.Color]::White; $soft = [System.Drawing.Color]::FromArgb(190, 196, 198)
+  function Fam([string[]]$names) { foreach ($n in $names) { try { $f = New-Object System.Drawing.FontFamily $n; if ($f.Name -eq $n) { return $f } } catch {} }; return [System.Drawing.FontFamily]::GenericSansSerif }
+  function Fnt($fam, [single]$pt) {
+    foreach ($style in 'Regular', 'Bold') { try { return New-Object System.Drawing.Font($fam, $pt, [System.Drawing.FontStyle]$style, [System.Drawing.GraphicsUnit]::Point) } catch {} }
+    return New-Object System.Drawing.Font('Segoe UI', $pt)
+  }
+  $heavy = Fam @('Encode Sans Condensed Black', 'Encode Sans Black', 'Segoe UI Black', 'Segoe UI')
+  $plain = Fam @('Encode Sans Medium', 'Encode Sans', 'Segoe UI Semibold', 'Segoe UI')
+
+  $form = New-Object System.Windows.Forms.Form
+  $form.Text = 'Session 609 Pre-Show'; $form.FormBorderStyle = 'None'; $form.StartPosition = 'CenterScreen'
+  $form.ClientSize = New-Object System.Drawing.Size(960, 540); $form.BackColor = $dark; $form.TopMost = $true; $form.KeyPreview = $true
+  $bgPath = Join-Path $PSScriptRoot '..\assets\preshow\bg.jpg'
+  if (Test-Path -LiteralPath $bgPath) { $form.BackgroundImage = [System.Drawing.Image]::FromFile((Resolve-Path -LiteralPath $bgPath).Path); $form.BackgroundImageLayout = 'Stretch' }
+  function Lbl([string]$text, $font, $color, [int]$x, [int]$y) {
+    $l = New-Object System.Windows.Forms.Label; $l.Text = $text; $l.Font = $font; $l.ForeColor = $color; $l.BackColor = [System.Drawing.Color]::Transparent
+    $l.AutoSize = $true; $l.UseMnemonic = $false; $l.Location = New-Object System.Drawing.Point($x, $y); $form.Controls.Add($l); return $l
+  }
+  function Btn([string]$text, [int]$x, [int]$w, $back, $fore, $border) {
+    $b = New-Object System.Windows.Forms.Button; $b.Text = $text; $b.Font = Fnt $heavy 17; $b.Size = New-Object System.Drawing.Size($w, 62); $b.Location = New-Object System.Drawing.Point($x, 404)
+    $b.FlatStyle = 'Flat'; $b.BackColor = $back; $b.ForeColor = $fore; $b.FlatAppearance.BorderColor = $border; $b.FlatAppearance.BorderSize = 2
+    $b.Cursor = [System.Windows.Forms.Cursors]::Hand; $b.TabStop = $false; $b.UseMnemonic = $false; $form.Controls.Add($b); return $b
+  }
+  $h1 = Lbl '00. PRE-SHOW' (Fnt $heavy 20) $white 50 36
+  [void](Lbl 'SESSION 609' (Fnt $plain 17) $green (50 + $h1.PreferredWidth + 12) 40)
+  $esc = Lbl 'ESC TO CLOSE' (Fnt $plain 10) $green 0 46; $esc.Location = New-Object System.Drawing.Point((960 - 52 - $esc.PreferredWidth), 46); $esc.Cursor = [System.Windows.Forms.Cursors]::Hand
+  [void](Lbl 'READY WHEN YOU ARE' (Fnt $heavy 44) $white 42 176)
+  $rows = @(@('DECK', $deckName.ToUpper()), @('DECK TAKES OVER', $whenText.ToUpper()), @('MUSIC', $(if ($tracks.Count) { "$($tracks.Count) TRACKS, SHUFFLED" } else { 'NO MUSIC FILES FOUND' })))
+  for ($i = 0; $i -lt $rows.Count; $i++) { [void](Lbl $rows[$i][0] (Fnt $plain 11) $green 52 (286 + $i * 30)); [void](Lbl $rows[$i][1] (Fnt $plain 11) $white 250 (286 + $i * 30)) }
+  $bTest = Btn 'AUDIO TEST' 52 250 ([System.Drawing.Color]::FromArgb(24, 30, 32)) $white $white
+  $bGo = Btn 'LAUNCH PRE SHOW' 318 340 $green $dark $green
+  $status = Lbl 'THE AUDIO TEST PLAYS MUSIC WITH THE ANNOUNCER OVER IT. SET THE LAPTOP VOLUME FOR THE ROOM.' (Fnt $plain 10) $soft 52 486
+
+  # everything the button and timer handlers need lives in one script-level table
+  $script:ss = @{ phase = 'idle'; result = 'cancel'; form = $form; bTest = $bTest; status = $status; tracks = $tracks; site = $site
+                  musicVol = $musicVol; voiceVol = $voiceVol; mp = $null; vp = $null; wc = $null; task = $null; file = ''; t0 = $null; voiceAt = $null; voiceEnd = $null; duck = 1.0 }
+  $script:ss.start = {
+    $s = $script:ss
+    $s.t0 = Get-Date; $s.voiceAt = $null; $s.voiceEnd = $null; $s.duck = 1.0; $s.phase = 'run'; $s.bTest.Text = 'STOP AUDIO TEST'
+    $s.status.Text = if ($s.tracks.Count) { 'MUSIC PLAYING. THE ANNOUNCER JOINS IN THREE SECONDS...' } else { 'NO MUSIC FILES FOUND. THE ANNOUNCER SPEAKS IN THREE SECONDS...' }
+    if ($s.tracks.Count) { try { $s.mp = New-Object System.Windows.Media.MediaPlayer; $s.mp.Open([uri](($s.tracks | Get-Random).FullName)); $s.mp.Volume = 0; $s.mp.Play() } catch { $s.mp = $null } }
+    try {
+      $s.vp = New-Object System.Windows.Media.MediaPlayer
+      $s.file = Join-Path $env:TEMP 'preshow-voice-audiotest.mp3'
+      $s.wc = New-Object System.Net.WebClient
+      $show = [DateTimeOffset]::Now.AddMinutes(5).ToUnixTimeMilliseconds()            # the server only speaks for a show that is about to start
+      $s.task = $s.wc.DownloadFileTaskAsync([uri]"$($s.site)/api/preshow/announce?show=$show&kind=test", $s.file)
+    } catch { $s.task = $null; $s.voiceEnd = Get-Date }
+  }
+  $script:ss.stop = {
+    param($msg)
+    $s = $script:ss
+    foreach ($p in @($s.mp, $s.vp)) { if ($p) { try { $p.Stop(); $p.Close() } catch {} } }
+    $s.mp = $null; $s.vp = $null
+    if ($s.wc) { try { $s.wc.CancelAsync() } catch {} }
+    $s.phase = 'idle'; $s.bTest.Text = 'AUDIO TEST'
+    if ($msg) { $s.status.Text = $msg }
+  }
+  $timer = New-Object System.Windows.Forms.Timer; $timer.Interval = 100
+  $timer.Add_Tick({
+    $s = $script:ss
+    if ($s.phase -ne 'run') { return }
+    $el = ((Get-Date) - $s.t0).TotalSeconds
+    if (-not $s.voiceAt -and -not $s.voiceEnd -and $el -ge 3) {                        # the announcer comes in once the clip is here
+      if ($s.task -and $s.task.IsCompleted) {
+        if ($s.task.Status -eq 'RanToCompletion' -and (Test-Path -LiteralPath $s.file) -and (Get-Item -LiteralPath $s.file).Length -gt 2000) {
+          try { $s.vp.Open([uri]$s.file); $s.vp.Volume = $s.voiceVol; $s.vp.Play(); $s.voiceAt = Get-Date; $s.status.Text = 'THE ANNOUNCER IS SPEAKING OVER THE MUSIC...' }
+          catch { $s.voiceEnd = Get-Date; $s.status.Text = 'THE ANNOUNCER COULD NOT PLAY ON THIS LAPTOP. MUSIC ONLY.' }
+        } else {
+          $why = 'no audio came back'; try { $why = $s.task.Exception.InnerException.Message } catch {}
+          $s.voiceEnd = Get-Date; $s.status.Text = ('ANNOUNCER UNAVAILABLE: ' + $why).ToUpper()
+        }
+      } elseif ($el -ge 14) { $s.voiceEnd = Get-Date; $s.status.Text = 'THE ANNOUNCER DID NOT ANSWER. CHECK THE INTERNET CONNECTION. MUSIC ONLY.' }
+    }
+    if ($s.voiceAt -and -not $s.voiceEnd) {
+      $done = $false
+      try { $done = ($s.vp.NaturalDuration.HasTimeSpan -and $s.vp.Position -ge $s.vp.NaturalDuration.TimeSpan.Subtract([TimeSpan]::FromMilliseconds(200))) -or ((Get-Date) - $s.voiceAt).TotalSeconds -gt 25 } catch { $done = $true }
+      if ($done) { $s.voiceEnd = Get-Date; $s.status.Text = 'MUSIC BACK UP TO FULL...' }
+    }
+    $duckTo = if ($s.voiceAt -and -not $s.voiceEnd) { 0.22 } else { 1.0 }                 # the same dip the pre-show uses
+    $s.duck = $s.duck + [Math]::Max(-0.12, [Math]::Min(0.12, $duckTo - $s.duck))
+    $tail = if ($s.voiceEnd) { ((Get-Date) - $s.voiceEnd).TotalSeconds } else { 0 }
+    $fade = if ($tail -gt 3) { [Math]::Max(0, 1 - ($tail - 3) / 1.2) } else { 1 }
+    if ($s.mp) { try { $s.mp.Volume = $s.musicVol * [Math]::Min(1, $el / 1.5) * $s.duck * $fade } catch {} }
+    if ($tail -gt 4.3 -or ($s.voiceEnd -and -not $s.mp)) { & $s.stop 'AUDIO TEST DONE. CHANGE THE LAPTOP VOLUME AND RUN IT AGAIN IF NEEDED.' }
+  })
+  $bTest.Add_Click({ if ($script:ss.phase -eq 'idle') { & $script:ss.start } else { & $script:ss.stop 'AUDIO TEST STOPPED.' } })
+  $bGo.Add_Click({ & $script:ss.stop $null; $script:ss.result = 'launch'; $script:ss.form.Close() })
+  $esc.Add_Click({ $script:ss.form.Close() })
+  $form.Add_KeyDown({ param($sender, $e) if ($e.KeyCode -eq [System.Windows.Forms.Keys]::Escape) { $script:ss.form.Close() } })
+  $form.Add_Shown({ $script:ss.form.Activate() })
+  $form.Add_FormClosing({ & $script:ss.stop $null })
+  $timer.Start(); [void]$form.ShowDialog(); $timer.Stop(); $timer.Dispose(); $form.Dispose()
+  return $script:ss.result
+}
+
 try {
   # ---- the deck
   if (-not $Deck) {
@@ -54,7 +160,20 @@ try {
   if (-not (Test-Path -LiteralPath $Deck)) { throw "Deck not found: $Deck" }
   $Deck = (Resolve-Path -LiteralPath $Deck).Path
 
-  # ---- the show time
+  # ---- the start screen: AUDIO TEST or LAUNCH PRE SHOW. Nothing else happens until LAUNCH is pressed.
+  $relative = $ShowAt -match '^\+(\d+(\.\d+)?)$'
+  $whenText = if ($relative) { "$($Matches[1]) minutes after you press launch" } else { 'at ' + (Get-Date $ShowAt).ToString('h:mm tt') + " on this laptop's clock" }
+  if (-not $relative -and (Get-Date $ShowAt) -lt (Get-Date).AddSeconds(20)) { throw "Show time $((Get-Date $ShowAt).ToString('HH:mm:ss')) is already here or past. Set SHOWAT to a later time." }
+  if (-not $NoMenu) {
+    [Net.ServicePointManager]::SecurityProtocol = [Net.ServicePointManager]::SecurityProtocol -bor [Net.SecurityProtocolType]::Tls12
+    $menuDir = if ($Music) { $Music } else { Join-Path $PSScriptRoot 'music' }
+    $menuTracks = @(); if (Test-Path -LiteralPath $menuDir) { $menuTracks = @(Get-ChildItem -LiteralPath $menuDir -File | Where-Object { $_.Extension -match '^\.(mp3|wav|m4a|aac|wma|flac)$' }) }
+    $choice = Show-StartScreen (Split-Path $Deck -Leaf) $whenText $menuTracks (([uri]$Url).GetLeftPart([UriPartial]::Authority)) $MusicVolume $VoiceVolume
+    if ($choice -ne 'launch') { Say 'The start screen was closed without launching.'; exit 0 }
+    Say 'LAUNCH PRE SHOW pressed.'
+  }
+
+  # ---- the show time (a "+N" time is counted from here, that is, from the launch button)
   if ($ShowAt -match '^\+(\d+(\.\d+)?)$') { $target = (Get-Date).AddMinutes([double]$Matches[1]) } else { $target = Get-Date $ShowAt }
   if ($target -lt (Get-Date).AddSeconds(20)) { throw "Show time $($target.ToString('HH:mm:ss')) is already here or past. Set SHOWAT to a later time." }
   $atMs = [long]([DateTimeOffset]$target).ToUnixTimeMilliseconds()

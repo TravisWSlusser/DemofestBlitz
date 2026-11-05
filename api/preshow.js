@@ -263,6 +263,7 @@ const VOICE_ID = process.env.ELEVENLABS_VOICE || 'QTGiyJvep6bcx4WD1qAq';
 const VOICE_MODELS = [process.env.ELEVENLABS_MODEL || 'eleven_v4', 'eleven_v4_turbo', 'eleven_v3', 'eleven_flash_v2_5'].filter((m, i, a) => a.indexOf(m) === i);
 const TAG_MODELS = /^eleven_v[34]/;
 const VOICE_DAILY_CAP = 60;          // generated lines per 24 hours, whatever happens
+const AUDIO_TEST = "[warm, upbeat game show host] Testing, testing... this is your announcer. [playful] If you can hear me clearly over the music, the room is ready. [chuckles] Break a leg.";
 const WELCOME = "[warm, upbeat game show host] Hey, hey... welcome to session six oh nine! [playful] While you're getting settled, grab your phone, scan that code on the screen, and put your name on the board. Right answers score... FAST answers score more. [chuckles] No pressure.";
 
 /* A name is read aloud to the room, so it gets a second, stricter look than the one for the screen: first name only
@@ -404,14 +405,16 @@ async function announce(req, res) {
   const show = showOf(req.query.show);
   const now = Date.now();
   if (show === 'preview' || Number(show) < now - 60000 || Number(show) > now + 20 * 60000) return res.status(400).json({ error: 'That show is not live.' });
-  const kind = ['welcome', 'mid', 'final'].includes(String(req.query.kind)) ? String(req.query.kind) : 'mid';
+  const kind = ['welcome', 'mid', 'final', 'test'].includes(String(req.query.kind)) ? String(req.query.kind) : 'mid';
+  const fixed = kind === 'welcome' ? WELCOME : kind === 'test' ? AUDIO_TEST : null;   // lines that do not depend on the leaderboard
   const t = timeline(show, now);
   // when the launcher will start playing this line (server time). With it, the captions go live for the screen and phones.
   const play = Number(req.query.play);
   const playAt = Number.isFinite(play) && play > now - 10000 && play < now + 120000 ? Math.round(play) : 0;
-  // the welcome is the same for every show, so it is stored once for all of them; a changed text or voice makes a new row
-  const rowShow = kind === 'welcome' ? '*' : show;
-  const slot = kind === 'welcome' ? 'welcome:timed:' + VOICE_ID + ':' + VOICE_MODELS[0] + ':' + WELCOME.length : kind === 'mid' ? 'mid:' + t.s : 'final';
+  // the welcome and the audio-test line are the same for every show, so each is stored once for all of them; a changed
+  // text or voice makes a new row
+  const rowShow = fixed ? '*' : show;
+  const slot = fixed ? kind + ':timed:' + VOICE_ID + ':' + VOICE_MODELS[0] + ':' + fixed.length : kind === 'mid' ? 'mid:' + t.s : 'final';
   const send = async (line, b64, cues, ms) => {
     cues = cues.replace(/six oh nine/gi, '609');                       // written out for the voice, shown as a number in the captions
     if (playAt) {
@@ -433,8 +436,8 @@ async function announce(req, res) {
   const used = await sql`SELECT COUNT(*)::int AS n FROM preshow_voice WHERE created_at > now() - interval '24 hours'`;
   if (used[0].n >= VOICE_DAILY_CAP) return res.status(429).json({ error: 'The voice has reached its daily limit.' });
 
-  let line = WELCOME, leader = null;
-  if (kind !== 'welcome') {
+  let line = fixed, leader = null;
+  if (!fixed) {
     const [top, cnt, prev] = await Promise.all([
       sql`SELECT id, name, score FROM preshow_players WHERE show = ${show} ORDER BY score DESC, id ASC LIMIT 3`,
       sql`SELECT COUNT(*)::int AS n FROM preshow_players WHERE show = ${show}`,
