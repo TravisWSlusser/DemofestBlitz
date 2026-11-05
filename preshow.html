@@ -3,52 +3,236 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Pre-Show · Side-Qlik</title>
+<title>Pre-Show · Session 609</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=VT323&family=Share+Tech+Mono&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="assets/booth.css">
+<link href="https://fonts.googleapis.com/css2?family=Encode+Sans+SC:wdth,wght@75,300;75,400;75,500;75,900;100,300;100,400;100,500&display=swap" rel="stylesheet">
+<link rel="preload" as="image" href="assets/preshow/bg.jpg">
 <style>
-  /* Placeholder while the trivia format is being decided: proves the slide pipeline end to end. */
-  .content { align-items: center; justify-content: center; text-align: center; gap: 14px; }
-  .logo { height: clamp(90px, 16vh, 160px); filter: drop-shadow(0 0 18px rgba(16,207,201,.5)); }
-  h1 { font-family: 'VT323', monospace; font-size: clamp(40px, 7vw, 92px); line-height: .95; letter-spacing: .05em; color: #fff; margin: 0; text-shadow: 0 0 22px rgba(16,207,201,.35); }
-  body.out > :not(script) { opacity: 0; transition: opacity .35s; }
-  .clock { font-family: 'VT323', monospace; font-size: clamp(60px, 12vw, 150px); color: var(--cyan); line-height: 1; letter-spacing: .04em; }
+  /* The big screen for the DevLearn Session 609 pre-show. It is dressed as a slide from the deck, not as the Demofest
+     booth: the deck's background image, Encode Sans SC (condensed black for headings, medium/regular/light for the
+     rest), white text with the deck's green accent, the card anchored bottom-left like the title slide.
+     The stage is a 16:9 box, letterboxed exactly like PowerPoint's slideshow, so the hand-over to slide 1 lines up. */
+  :root { --green: #00B050; --white: #FFFFFF; --soft: rgba(255,255,255,.72); --line: rgba(255,255,255,.10); }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; background: #000; overflow: hidden; cursor: none; }
+  body { display: flex; align-items: center; justify-content: center;
+    font-family: 'Encode Sans SC', 'Encode Sans SC Condensed', 'Encode Sans Condensed', 'Segoe UI', sans-serif; color: var(--white); text-transform: uppercase; }
+  .stage { position: relative; width: min(100vw, calc(100vh * 16 / 9)); aspect-ratio: 16 / 9; overflow: hidden;
+    container-type: size; background: #0b0e0f url('assets/preshow/bg.jpg') center / 100% 100% no-repeat; }
+  .layer { position: absolute; inset: 0; transition: opacity .9s ease; }
+  body.out .layer { opacity: 0; }                     /* last second: the words leave, the deck's background stays */
+
+  /* header, like "00. INTRODUCTION  ABOUT ME" on the deck's section slides */
+  .head { position: absolute; left: 5.5cqw; top: 5.4cqh; display: flex; align-items: baseline; gap: 1.5cqw; }
+  .head .h1 { font-stretch: 75%; font-weight: 900; font-size: 2.1cqw; letter-spacing: -.01em; }
+  .head .h2 { font-weight: 500; font-size: 1.95cqw; color: var(--green); }
+  .clock { position: absolute; right: 3.9cqw; top: 5.4cqh; display: flex; align-items: baseline; gap: 1.1cqw; }
+  .clock .k { font-weight: 500; font-size: 1.3cqw; color: var(--green); letter-spacing: .04em; }
+  .clock .t { font-stretch: 75%; font-weight: 900; font-size: 2.1cqw; font-variant-numeric: tabular-nums; }
+
+  /* the card: bottom-left, like the title slide */
+  .card { position: absolute; left: 3.9cqw; right: 31cqw; bottom: 13.2cqh; }
+  .card .num { font-weight: 500; font-size: 1.46cqw; color: var(--green); letter-spacing: .04em; margin-bottom: 1.4cqh; }
+  .card .q { font-stretch: 75%; font-weight: 900; font-size: 3.4cqw; line-height: 1.08; letter-spacing: -.005em; margin: 0 0 3.2cqh; text-wrap: balance; }
+  .answers { list-style: none; margin: 0; padding: 0; display: grid; gap: 1.4cqh; }
+  .answers li { display: grid; grid-template-columns: 2.6cqw 1fr; align-items: baseline; font-weight: 400; font-size: 2.1cqw; line-height: 1.15;
+    padding-left: 1.1cqw; border-left: .28cqw solid transparent; transition: opacity .5s, border-color .5s; }
+  .answers .l { font-stretch: 75%; font-weight: 900; color: var(--green); }
+  .card.answer .answers li { opacity: .26; }
+  .card.answer .answers li.ok { opacity: 1; border-left-color: var(--green); font-weight: 500; }
+  .after { margin-top: 2.8cqh; min-height: 7.4cqh; opacity: 0; transform: translateY(.6cqh); transition: opacity .6s .25s, transform .6s .25s; }
+  .card.answer .after { opacity: 1; transform: none; }
+  .fact { font-weight: 300; font-size: 1.7cqw; line-height: 1.3; color: var(--soft); text-transform: none; }
+  .stat { font-weight: 500; font-size: 1.3cqw; color: var(--green); letter-spacing: .04em; margin-top: 1cqh; }
+  .card.swap { animation: rise .7s ease both; }
+  @keyframes rise { from { opacity: 0; transform: translateY(1.6cqh); } to { opacity: 1; transform: none; } }
+
+  /* timer: a thin green line that runs out while the card is open */
+  .bar { position: absolute; left: 3.9cqw; right: 31cqw; bottom: 9.6cqh; height: .22cqw; background: var(--line); }
+  .bar i { display: block; height: 100%; width: 100%; background: var(--green); transform-origin: left center; }
+  .foot { position: absolute; left: 3.9cqw; bottom: 4.9cqh; font-weight: 500; font-size: 1.46cqw; color: var(--green); letter-spacing: .01em; white-space: nowrap; }
+
+  /* right column: how to join, then the live leaderboard */
+  .side { position: absolute; right: 3.9cqw; top: 14.5cqh; width: 23.4cqw; }
+  .joinbox { display: grid; grid-template-columns: 9.4cqw 1fr; gap: 1.5cqw; align-items: center; }
+  .qr { background: #fff; padding: .55cqw; line-height: 0; }
+  .qr img, .qr canvas { width: 100% !important; height: auto !important; display: block; }
+  .joinbox .j1 { font-stretch: 75%; font-weight: 900; font-size: 2.3cqw; line-height: 1; }
+  .joinbox .j2 { font-weight: 400; font-size: 1.2cqw; line-height: 1.35; color: var(--soft); margin-top: 1cqh; }
+  .joinbox .j2 b { color: var(--green); font-weight: 500; }
+  .board { margin-top: 4.6cqh; }
+  .board .bh { display: flex; align-items: baseline; justify-content: space-between; padding-bottom: 1.1cqh; border-bottom: .12cqw solid var(--green); }
+  .board .b1 { font-weight: 500; font-size: 1.46cqw; color: var(--green); letter-spacing: .04em; }
+  .board .b2 { font-weight: 300; font-size: 1.2cqw; color: var(--soft); }
+  .board ol { list-style: none; margin: 0; padding: 0; }
+  .board li { display: grid; grid-template-columns: 2.5cqw 1fr auto; align-items: baseline; gap: .4cqw; padding: 1.05cqh 0; border-bottom: 1px solid var(--line); font-size: 1.75cqw; line-height: 1.1; }
+  .board .r { font-stretch: 75%; font-weight: 900; color: var(--green); }
+  .board .n { font-weight: 400; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .board .s { font-stretch: 75%; font-weight: 900; font-variant-numeric: tabular-nums; }
+  .board li.first .n { font-weight: 500; }
+  .board li.bump { animation: bump .9s ease; }
+  @keyframes bump { 0% { background: rgba(0,176,80,.28); } 100% { background: transparent; } }
+  .board .empty { font-weight: 300; font-size: 1.3cqw; color: var(--soft); padding-top: 1.6cqh; }
+
+  /* the closing card: the last seconds before the talk */
+  .final { position: absolute; left: 3.9cqw; bottom: 13.2cqh; display: none; }
+  .final .k { font-weight: 500; font-size: 1.95cqw; color: var(--green); margin-bottom: 1cqh; }
+  .final .big { font-stretch: 75%; font-weight: 900; font-size: 13cqw; line-height: .9; font-variant-numeric: tabular-nums; letter-spacing: -.02em; }
+  .final .s { font-weight: 300; font-size: 2.1cqw; color: var(--soft); margin-top: 2cqh; }
+  body.final-on .card, body.final-on .bar, body.final-on .clock, body.final-on .joinbox { display: none; }
+  body.final-on .final { display: block; animation: rise .7s ease both; }
+  body.final-on .board { margin-top: 0; }
 </style>
 </head>
 <body>
-  <video class="bg-video" autoplay muted loop playsinline><source src="assets/brand/RecRoom_bg_loop1.webm" type="video/webm"></video>
-  <div class="bg-overlay"></div>
-  <div class="scanlines"></div>
-  <div class="content">
-    <video class="logo" autoplay muted loop playsinline poster="assets/brand/RecRoom_Logo1.png" aria-label="REC ROOM"><source src="assets/brand/REC_Room_logo_360.webm" type="video/webm"></video>
-    <h1>PRE-SHOW TRIVIA</h1>
-    <div class="label" id="lbl">live from the laptop &middot; the clock proves it</div>
-    <div class="clock" id="clock">--:--:--</div>
+  <div class="stage">
+    <div class="layer">
+      <div class="head"><span class="h1">00. Pre-Show</span><span class="h2">Cinema Trivia</span></div>
+      <div class="clock" id="clock" hidden><span class="k">Show starts in</span><span class="t" id="left">--:--</span></div>
+
+      <div class="card" id="card">
+        <div class="num" id="num"></div>
+        <h1 class="q" id="q"></h1>
+        <ul class="answers" id="answers"></ul>
+        <div class="after"><div class="fact" id="fact"></div><div class="stat" id="stat"></div></div>
+      </div>
+      <div class="bar"><i id="bar"></i></div>
+
+      <div class="final">
+        <div class="k">The show starts in</div>
+        <div class="big" id="big">20</div>
+        <div class="s">Find a seat. Phones on silent.</div>
+      </div>
+
+      <aside class="side">
+        <div class="joinbox">
+          <div class="qr" id="qr"></div>
+          <div><div class="j1">Play along</div><div class="j2">Scan with your phone.<br>Add your name.<br><b>Fast and right wins.</b></div></div>
+        </div>
+        <div class="board">
+          <div class="bh"><span class="b1" id="btitle">Leaderboard</span><span class="b2" id="count"></span></div>
+          <ol id="board"></ol>
+          <div class="empty" id="empty">Be the first name on the board</div>
+        </div>
+      </aside>
+
+      <div class="foot">DevLearn 2026 &nbsp;│&nbsp; Session 609 &nbsp;│&nbsp; Travis Slusser, Senior Learning Strategist, GSE, Qlik</div>
+    </div>
   </div>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
   <script>
-    'use strict';
-    // ?at=<epoch ms> is show time (set by the launcher); ?bg=<hex> is slide one's colour. In the last second the page
-    // goes solid that colour, so when the launcher closes the browser the deck underneath looks like the same picture.
-    const q = new URLSearchParams(location.search);
-    const at = Number(q.get('at')) || 0;
-    const bg = /^[0-9a-f]{6}$/i.test(q.get('bg') || '') ? '#' + q.get('bg') : '#000000';
-    const c = document.getElementById('clock'), l = document.getElementById('lbl');
-    const pad = n => String(n).padStart(2, '0');
-    let out = false;
-    const tick = () => {
-      const now = Date.now();
-      if (at) {
-        const left = Math.max(0, Math.ceil((at - now) / 1000));
-        c.textContent = pad(Math.floor(left / 60)) + ':' + pad(left % 60);
-        l.textContent = 'the show starts in';
-        if (at - now <= 1000 && !out) { out = true; document.body.style.background = bg; document.body.classList.add('out'); }
-      } else {
-        c.textContent = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
-      }
-    };
-    tick(); setInterval(tick, 200);
+  'use strict';
+  /* Everything runs on the server's clock (see api/preshow.js): the page asks for the state every few seconds,
+     measures how far its own clock is off, and works out which card is up from that. Phones do the same, so the
+     screen and the phones flip together. ?at=<epoch ms> is show time, passed by the launcher; it is also the show id,
+     so every run gets its own empty leaderboard. Without it the page runs as an endless preview. */
+  const API = '/api/preshow/';
+  const POLL_MS = 2500, OUT_MS = 1100;
+  const at = Number(new URLSearchParams(location.search).get('at')) || 0;
+  const show = at ? String(at) : 'preview';
+  const $ = id => document.getElementById(id);
+  const pad = n => String(n).padStart(2, '0');
+  const LETTERS = ['A', 'B', 'C', 'D'];
+
+  let T = { ask: 18000, answer: 8000, final: 20000 };
+  let cards = [], reveals = {}, offset = 0, synced = false, shown = '', boardKey = '', lastAsk = 0, scores = {};
+  const srvNow = () => Date.now() + offset;
+
+  function timeline(now){
+    const cycle = T.ask + T.answer;
+    const anchor = at ? (at - T.final) % cycle : 0;
+    const s = Math.floor((now - anchor) / cycle), into = now - anchor - s * cycle, n = cards.length || 1;
+    return { s, into, qi: ((s % n) + n) % n, reveal: into >= T.ask, closed: at ? now >= at - T.final : false };
+  }
+
+  async function pull(withCards){
+    const t0 = Date.now();
+    try {
+      const r = await fetch(API + 'state?show=' + show + (withCards ? '&cards=1' : ''), { cache: 'no-store' });
+      if (!r.ok) throw new Error('state ' + r.status);
+      const d = await r.json(), t1 = Date.now(), rtt = t1 - t0;
+      if (!synced || rtt < 600) { offset = d.now + rtt / 2 - t1; synced = true; }   // a slow round trip is a poor clock sample
+      T = { ask: d.ask, answer: d.answer, final: d.final };
+      if (d.cards) cards = d.cards;
+      if (d.reveal) reveals[d.reveal.qi] = d.reveal;
+      drawBoard(d.top || [], d.players || 0);
+    } catch (_) { /* keep showing what we have; the next poll tries again */ }
+  }
+
+  function drawBoard(top, players){
+    const key = JSON.stringify(top) + players;
+    if (key === boardKey) return; boardKey = key;
+    const ol = $('board'); ol.textContent = '';
+    top.forEach((p, i) => {
+      const li = document.createElement('li'); if (i === 0) li.className = 'first';
+      const id = p.name + '|' + i;
+      if (scores[p.name] !== undefined && scores[p.name] !== p.score) li.classList.add('bump');
+      const r = document.createElement('span'); r.className = 'r'; r.textContent = i + 1;
+      const n = document.createElement('span'); n.className = 'n'; n.textContent = p.name;
+      const s = document.createElement('span'); s.className = 's'; s.textContent = p.score.toLocaleString('en-US');
+      li.append(r, n, s); ol.append(li);
+    });
+    scores = Object.fromEntries(top.map(p => [p.name, p.score]));
+    $('empty').hidden = top.length > 0;
+    $('count').textContent = players ? players + (players === 1 ? ' player' : ' players') : '';
+  }
+
+  function drawCard(tl){
+    const rev = tl.reveal ? reveals[tl.qi] : null;
+    const key = tl.s + ':' + (rev ? 'a' + rev.answered + '/' + rev.right : 'q');
+    if (key === shown) return;
+    const fresh = !shown.startsWith(tl.s + ':');
+    shown = key;
+    const c = cards[tl.qi], card = $('card');
+    if (fresh) {
+      $('num').textContent = 'Question ' + pad(tl.qi + 1) + ' of ' + pad(cards.length);
+      $('q').textContent = c.q;
+      const ul = $('answers'); ul.textContent = '';
+      c.a.forEach((t, n) => {
+        const li = document.createElement('li');
+        const l = document.createElement('span'); l.className = 'l'; l.textContent = LETTERS[n];
+        const s = document.createElement('span'); s.textContent = t;
+        li.append(l, s); ul.append(li);
+      });
+      $('fact').textContent = ''; $('stat').textContent = '';
+      card.classList.remove('answer', 'swap'); void card.offsetWidth; card.classList.add('swap');
+    }
+    if (rev) {
+      [...$('answers').children].forEach((li, n) => li.classList.toggle('ok', n === rev.ok));
+      $('fact').textContent = rev.fact;
+      $('stat').textContent = rev.answered ? rev.answered + ' answered │ ' + Math.round(100 * rev.right / rev.answered) + '% got it' : '';
+      card.classList.add('answer');
+    }
+  }
+
+  function frame(){
+    const now = srvNow();
+    const tl = timeline(now);
+    if (at) {
+      const left = at - now, secs = Math.max(0, Math.ceil(left / 1000));
+      $('clock').hidden = false;
+      $('left').textContent = pad(Math.floor(secs / 60)) + ':' + pad(secs % 60);
+      $('big').textContent = secs;
+      document.body.classList.toggle('final-on', tl.closed);
+      $('btitle').textContent = tl.closed ? 'Final standings' : 'Leaderboard';
+      document.body.classList.toggle('out', left <= OUT_MS);
+    }
+    if (cards.length && !tl.closed) {
+      drawCard(tl);
+      $('bar').style.transform = 'scaleX(' + (tl.reveal ? 0 : 1 - tl.into / T.ask) + ')';
+      // the moment a card closes, fetch its answer straight away rather than waiting for the next poll
+      if (tl.reveal && !reveals[tl.qi] && Date.now() - lastAsk > 450) { lastAsk = Date.now(); pull(); }
+    }
+    requestAnimationFrame(frame);
+  }
+
+  new QRCode($('qr'), { text: location.origin + '/609' + (at ? '?at=' + at : ''), width: 360, height: 360,
+    colorDark: '#000000', colorLight: '#ffffff', correctLevel: QRCode.CorrectLevel.M });
+  pull(true).then(() => { if (!cards.length) setTimeout(() => pull(true), 1500); });
+  setInterval(() => pull(!cards.length), POLL_MS);
+  frame();
   </script>
 </body>
 </html>

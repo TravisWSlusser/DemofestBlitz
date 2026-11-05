@@ -144,13 +144,15 @@ public static class PreShowWin {
     Start-Sleep -Milliseconds 200
     if (-not (KioskProcs)) { Say 'Kiosk closed by hand; revealing the deck now.'; break }
   }
-  # The page is solid black by now and so is the held slideshow. Lift the slideshow above the browser first (black over
-  # black, nothing to see), give it the keyboard, and only then close the browser: no other window can flash through.
+  # By now the page has let its words fade and shows only the deck's background. Start slide 1 while the slideshow is
+  # still hidden under the browser, then lift it above the browser and give it the keyboard, and only then close the
+  # browser. Same background on both, so the title simply arrives; no other window can flash through.
+  Retry { $ssw.View.GotoSlide(1, -1) } 8 | Out-Null                # slide 1 from the top: animations and timings start now
+  try { if ($ssw.View.State -ne 1) { $ssw.View.State = 1 } } catch {}
+  Start-Sleep -Milliseconds 350                                    # let PowerPoint paint the slide before it is shown
   [PreShowWin]::Raise($hwnd, $true)
   $sf = [PreShowWin]::Focus($hwnd)
   KioskProcs | ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }
-  Retry { $ssw.View.GotoSlide(1, -1) } 8 | Out-Null                # slide 1 from the top: animations and timings start now
-  try { if ($ssw.View.State -ne 1) { $ssw.View.State = 1 } } catch {}
   Start-Sleep -Milliseconds 300
   if (-not $sf) { $sf = [PreShowWin]::Focus($hwnd) }
   [PreShowWin]::Raise($hwnd, $false)                               # no longer pinned: Alt+Tab and Esc behave as usual

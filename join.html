@@ -1,0 +1,244 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0b0e0f">
+<title>Play along · Session 609</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Encode+Sans+SC:wdth,wght@75,300;75,400;75,500;75,900;100,300;100,400;100,500&display=swap" rel="stylesheet">
+<style>
+  /* The phone side of the Session 609 pre-show: join with a name, tap an answer for the card on the big screen.
+     Same dress as the deck: its background, Encode Sans SC, white with the green accent. */
+  :root { --green: #00B050; --white: #FFFFFF; --soft: rgba(255,255,255,.72); --line: rgba(255,255,255,.14); }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body { margin: 0; min-height: 100%; background: #0b0e0f; }
+  body { font-family: 'Encode Sans SC', 'Segoe UI', system-ui, sans-serif; color: var(--white); text-transform: uppercase;
+    background: #0b0e0f url('assets/preshow/bg.jpg') 70% center / cover fixed no-repeat; }
+  .wrap { min-height: 100vh; min-height: 100dvh; max-width: 560px; margin: 0 auto; padding: 18px 20px calc(18px + env(safe-area-inset-bottom)); display: flex; flex-direction: column; }
+  header { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; padding-bottom: 12px; border-bottom: 2px solid var(--green); }
+  header .h1 { font-stretch: 75%; font-weight: 900; font-size: 1.15rem; }
+  header .h2 { font-weight: 500; font-size: .95rem; color: var(--green); }
+  .view { display: none; flex: 1; flex-direction: column; }
+  .view.on { display: flex; }
+  .k { font-weight: 500; font-size: .85rem; color: var(--green); letter-spacing: .04em; }
+  h1 { font-stretch: 75%; font-weight: 900; font-size: 2.3rem; line-height: 1.02; margin: 10px 0 14px; }
+  p { font-weight: 300; font-size: 1.05rem; line-height: 1.35; color: var(--soft); margin: 0 0 22px; text-transform: none; }
+
+  /* join */
+  #join { justify-content: center; }
+  #name { width: 100%; background: rgba(255,255,255,.06); border: 1px solid var(--line); border-bottom: 2px solid var(--green); color: #fff;
+    font: 500 1.4rem 'Encode Sans SC', sans-serif; text-transform: uppercase; padding: 16px 14px; border-radius: 0; outline: none; }
+  #name::placeholder { color: rgba(255,255,255,.35); }
+  .go { margin-top: 14px; width: 100%; background: var(--green); color: #04130a; border: 0; padding: 17px; cursor: pointer;
+    font: 900 1.25rem 'Encode Sans SC', sans-serif; font-stretch: 75%; text-transform: uppercase; letter-spacing: .02em; }
+  .go:disabled { opacity: .5; }
+  .err { min-height: 1.4em; margin-top: 12px; font-weight: 500; font-size: .9rem; color: #ff8a7a; }
+
+  /* play */
+  .me { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; padding: 12px 0 0; font-weight: 500; font-size: .95rem; }
+  .me .nm { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .me .sc { color: var(--green); white-space: nowrap; }
+  .qwrap { margin-top: auto; padding-top: 18px; }
+  .q { font-stretch: 75%; font-weight: 900; font-size: 1.65rem; line-height: 1.08; margin: 8px 0 14px; }
+  .bar { height: 3px; background: var(--line); margin-bottom: 14px; }
+  .bar i { display: block; height: 100%; background: var(--green); transform-origin: left center; }
+  .opts { display: grid; gap: 10px; }
+  .opt { display: grid; grid-template-columns: 30px 1fr; align-items: center; gap: 4px; width: 100%; text-align: left; min-height: 60px; padding: 10px 14px;
+    background: rgba(255,255,255,.06); border: 1px solid var(--line); border-left: 4px solid transparent; color: #fff; cursor: pointer;
+    font: 400 1.12rem/1.15 'Encode Sans SC', sans-serif; text-transform: uppercase; transition: opacity .3s, background .3s, border-color .3s; }
+  .opt .l { font-stretch: 75%; font-weight: 900; color: var(--green); font-size: 1.25rem; }
+  .opt.pick { border-color: #fff; border-left-color: #fff; background: rgba(255,255,255,.14); font-weight: 500; }
+  .opts.locked .opt:not(.pick) { opacity: .45; }
+  .opts.shown .opt { opacity: .3; }
+  .opts.shown .opt.ok { opacity: 1; border-color: var(--green); border-left-color: var(--green); background: rgba(0,176,80,.22); font-weight: 500; }
+  .opts.shown .opt.pick:not(.ok) { opacity: .75; border-color: #ff8a7a; border-left-color: #ff8a7a; background: rgba(255,138,122,.10); }
+  .opt:disabled { cursor: default; }
+  .status { min-height: 3.2em; margin-top: 14px; font-weight: 500; font-size: 1rem; color: var(--soft); }
+  .status b { color: var(--green); font-stretch: 75%; font-weight: 900; font-size: 1.5rem; display: block; }
+
+  /* done */
+  #done { justify-content: center; }
+  #done .big { font-stretch: 75%; font-weight: 900; font-size: 5.2rem; line-height: .9; margin: 6px 0 10px; }
+</style>
+</head>
+<body>
+  <div class="wrap">
+    <header><span class="h1">00. Pre-Show</span><span class="h2">Cinema Trivia</span></header>
+
+    <section class="view" id="join">
+      <div class="k">DevLearn 2026 │ Session 609</div>
+      <h1>Play along</h1>
+      <p>Your name goes on the big screen. Answer on your phone. Right answers score, and faster answers score more.</p>
+      <form id="form" autocomplete="off">
+        <input id="name" name="pn" type="text" maxlength="18" placeholder="Your name" autocomplete="off" autocapitalize="words" spellcheck="false" enterkeyhint="go" required>
+        <button class="go" id="go" type="submit">Join the game</button>
+      </form>
+      <div class="err" id="err"></div>
+    </section>
+
+    <section class="view" id="play">
+      <div class="me"><span class="nm" id="meName"></span><span class="sc" id="meScore"></span></div>
+      <div class="qwrap">
+        <div class="k" id="num"></div>
+        <div class="q" id="q"></div>
+        <div class="bar"><i id="bar"></i></div>
+        <div class="opts" id="opts"></div>
+        <div class="status" id="status"></div>
+      </div>
+    </section>
+
+    <section class="view" id="done">
+      <div class="k" id="doneK">That is the game</div>
+      <div class="big" id="doneBig"></div>
+      <p id="doneP"></p>
+      <div class="k">Phones on silent. Enjoy the show.</div>
+    </section>
+  </div>
+
+  <script>
+  'use strict';
+  /* Runs on the server's clock, like the big screen (see api/preshow.js). ?at=<epoch ms> comes from the QR code and
+     is both show time and the show id. The player's token is kept on this phone only and sent in a header. */
+  const API = '/api/preshow/';
+  const at = Number(new URLSearchParams(location.search).get('at')) || 0;
+  const show = at ? String(at) : 'preview';
+  const KEY = 'preshow609:' + show;
+  const $ = id => document.getElementById(id);
+  const pad = n => String(n).padStart(2, '0');
+  const LETTERS = ['A', 'B', 'C', 'D'];
+
+  let T = { ask: 18000, answer: 8000, final: 20000 };
+  let cards = [], reveals = {}, offset = 0, synced = false;
+  let me = null;                       // { token, name }
+  let stat = null;                     // my latest numbers from the server
+  let slot = null, pick = null, late = false, drawn = '', revealAsk = 0, revealDelay = 0, doneAsked = false;
+  try { me = JSON.parse(localStorage.getItem(KEY) || 'null'); } catch (_) {}
+  const srvNow = () => Date.now() + offset;
+  const view = id => document.querySelectorAll('.view').forEach(v => v.classList.toggle('on', v.id === id));
+
+  function timeline(now){
+    const cycle = T.ask + T.answer;
+    const anchor = at ? (at - T.final) % cycle : 0;
+    const s = Math.floor((now - anchor) / cycle), into = now - anchor - s * cycle, n = cards.length || 1;
+    return { s, into, qi: ((s % n) + n) % n, reveal: into >= T.ask, closed: at ? now >= at - T.final : false };
+  }
+
+  async function pull(){
+    const t0 = Date.now();
+    try {
+      const r = await fetch(API + 'state?show=' + show + (cards.length ? '' : '&cards=1'), { cache: 'no-store', headers: me ? { 'X-Player-Token': me.token } : {} });
+      if (!r.ok) throw new Error('state ' + r.status);
+      const d = await r.json(), t1 = Date.now(), rtt = t1 - t0;
+      if (!synced || rtt < 800) { offset = d.now + rtt / 2 - t1; synced = true; }
+      T = { ask: d.ask, answer: d.answer, final: d.final };
+      if (d.cards) cards = d.cards;
+      if (d.reveal) reveals[d.reveal.qi] = d.reveal;
+      if (me && d.me === null) { me = null; stat = null; try { localStorage.removeItem(KEY); } catch (_) {} }   // the board was cleared: join again
+      if (d.me) { stat = d.me; stat.players = d.players; stat.qi = d.qi; if (d.me.pick !== null && d.qi === timeline(srvNow()).qi && pick === null) pick = d.me.pick; }
+      return d;
+    } catch (_) { return null; }
+  }
+
+  function drawMe(){
+    if (!me) return;
+    $('meName').textContent = me.name;
+    $('meScore').textContent = stat ? stat.score.toLocaleString('en-US') + ' pts │ #' + stat.rank + ' of ' + stat.players : '';
+  }
+
+  function tap(n){
+    if (pick !== null) return;
+    const tl = timeline(srvNow());
+    if (tl.reveal || tl.closed) return;
+    pick = n; draw(true);
+    fetch(API + 'answer', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Player-Token': me.token }, body: JSON.stringify({ show, choice: n }) })
+      .then(r => r.json()).then(d => {
+        if (d && d.ok) { if (d.pick !== pick) { pick = d.pick; draw(true); } }
+        else if (d && d.reason) { late = true; draw(true); }
+        else if (d && d.error) { me = null; try { localStorage.removeItem(KEY); } catch (_) {} }
+      }).catch(() => {});
+  }
+
+  function draw(force){
+    const tl = timeline(srvNow());
+    const rev = tl.reveal ? reveals[tl.qi] : null;
+    if (tl.s !== slot) { slot = tl.s; pick = null; late = false; revealAsk = 0; revealDelay = 150 + Math.random() * 900; drawn = ''; }
+    const key = tl.s + ':' + (tl.reveal ? (rev ? 'a' : 'w') : 'q') + ':' + pick + ':' + late + ':' + (stat ? stat.score + '/' + stat.pts : '');
+    if (!force && key === drawn) return; drawn = key;
+    const c = cards[tl.qi];
+    $('num').textContent = 'Question ' + pad(tl.qi + 1) + ' of ' + pad(cards.length);
+    $('q').textContent = c.q;
+    const box = $('opts');
+    if (box.dataset.slot !== String(tl.s)) {
+      box.dataset.slot = String(tl.s); box.textContent = '';
+      c.a.forEach((t, n) => {
+        const b = document.createElement('button'); b.type = 'button'; b.className = 'opt';
+        const l = document.createElement('span'); l.className = 'l'; l.textContent = LETTERS[n];
+        const s = document.createElement('span'); s.textContent = t;
+        b.append(l, s); b.addEventListener('click', () => tap(n)); box.append(b);
+      });
+    }
+    const open = !tl.reveal && pick === null;
+    [...box.children].forEach((b, n) => { b.disabled = !open; b.classList.toggle('pick', n === pick); b.classList.toggle('ok', !!rev && n === rev.ok); });
+    box.classList.toggle('locked', pick !== null && !rev);
+    box.classList.toggle('shown', !!rev);
+    const st = $('status');
+    if (rev) {
+      if (pick === null) st.textContent = 'No answer this time.';
+      else if (late) st.textContent = 'Just too late.';
+      else if (pick === rev.ok) {
+        st.textContent = '';
+        if (stat && stat.qi === tl.qi && stat.right && stat.pts) { const b = document.createElement('b'); b.textContent = '+' + stat.pts + ' points'; st.append(b); }
+        st.append('Right answer.');
+      }
+      else st.textContent = 'Not this one.';
+    } else if (tl.reveal) st.textContent = pick === null ? 'Time is up.' : 'Locked in.';
+    else st.textContent = pick === null ? 'Tap your answer. Faster scores more.' : 'Locked in. Watch the big screen.';
+    drawMe();
+  }
+
+  function tick(){
+    if (!me) { view('join'); return; }
+    if (!cards.length) return;
+    const now = srvNow(), tl = timeline(now);
+    if (tl.closed) {
+      if (!doneAsked) { doneAsked = true; setTimeout(() => pull().then(drawDone), 300 + Math.random() * 1500); }
+      drawDone(); view('done'); return;
+    }
+    view('play'); draw(false);
+    $('bar').style.transform = 'scaleX(' + (tl.reveal ? 0 : 1 - tl.into / T.ask) + ')';
+    // at the reveal, ask once for the answer and my points (each phone waits a random beat so they do not all hit at once)
+    const needs = tl.reveal && (!reveals[tl.qi] || (pick !== null && !late && !(stat && stat.qi === tl.qi && stat.pts !== undefined)));
+    if (needs && tl.into - T.ask > revealDelay && Date.now() - revealAsk > 1500) { revealAsk = Date.now(); pull().then(() => draw(true)); }
+  }
+
+  function drawDone(){
+    $('doneBig').textContent = stat ? '#' + stat.rank : '';
+    $('doneP').textContent = stat ? me.name + ', you finished ' + ordinal(stat.rank) + ' of ' + stat.players + ' with ' + stat.score.toLocaleString('en-US') + ' points and ' + stat.correct + ' right.' : '';
+  }
+  const ordinal = n => { const s = ['th', 'st', 'nd', 'rd'], v = n % 100; return n + (s[(v - 20) % 10] || s[v] || s[0]); };
+
+  $('form').addEventListener('submit', async e => {
+    e.preventDefault();
+    const name = $('name').value.trim();
+    if (name.length < 2) { $('err').textContent = 'Enter a name, 2 to 18 characters.'; return; }
+    $('go').disabled = true; $('err').textContent = '';
+    try {
+      const r = await fetch(API + 'join', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ show, name }) });
+      const d = await r.json();
+      if (!r.ok || !d.ok) throw new Error(d.error || 'Could not join. Try again.');
+      me = { token: d.token, name: d.name };
+      try { localStorage.setItem(KEY, JSON.stringify(me)); } catch (_) {}
+      document.activeElement && document.activeElement.blur();
+      await pull(); tick();
+    } catch (ex) { $('err').textContent = ex.message; }
+    $('go').disabled = false;
+  });
+
+  pull().then(() => { if (!me) view('join'); tick(); });
+  setInterval(tick, 100);
+  setInterval(() => { if (me && !timeline(srvNow()).closed) pull(); }, 20000);   // keeps the clock sync and my rank fresh
+  </script>
+</body>
+</html>
