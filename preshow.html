@@ -138,7 +138,40 @@
 
   let T = { ask: 18000, answer: 8000, final: 20000 };
   let cards = [], reveals = {}, offset = 0, synced = false, shown = '', boardKey = '', lastAsk = 0, scores = {};
+  let lastPlayers = -1, lastJoinSfx = 0, lastTick = '';
   const srvNow = () => Date.now() + offset;
+
+  /* Sound effects: short synthesized tones, so there are no audio files to load. The launcher starts Chrome with
+     autoplay allowed; in an ordinary browser tab the first click or key press switches the sound on.
+     ?sfx=0 turns them off, and the M key toggles them while the page has focus.
+     Music is not played here: the launcher plays it from the laptop. */
+  let sfxOn = new URLSearchParams(location.search).get('sfx') !== '0';
+  let ac = null, bus = null;
+  function audio(){
+    if (!sfxOn) return null;
+    if (!ac) {
+      const AC = window.AudioContext || window.webkitAudioContext; if (!AC) return null;
+      ac = new AC(); bus = ac.createGain(); bus.gain.value = 0.22; bus.connect(ac.destination);
+    }
+    if (ac.state === 'suspended') ac.resume().catch(() => {});
+    return ac.state === 'running' ? ac : null;
+  }
+  function tone(freq, when, dur, type, vol, slideTo){
+    const o = ac.createOscillator(), g = ac.createGain(), t = ac.currentTime + when;
+    o.type = type; o.frequency.setValueAtTime(freq, t);
+    if (slideTo) o.frequency.exponentialRampToValueAtTime(slideTo, t + dur);
+    g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(vol, t + 0.015); g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+    o.connect(g); g.connect(bus); o.start(t); o.stop(t + dur + 0.05);
+  }
+  const sfx = {
+    card(){ if (audio()) { tone(392, 0, .22, 'triangle', .7); tone(587.33, .11, .34, 'triangle', .8); } },             // a new question arrives
+    tick(){ if (audio()) tone(1320, 0, .06, 'sine', .35); },                                                             // the last seconds of a card
+    reveal(){ if (audio()) [523.25, 659.25, 783.99, 1046.5].forEach((f, i) => tone(f, i * .085, .5, 'sine', .7)); },     // the answer
+    join(){ if (audio()) tone(880, 0, .12, 'sine', .4, 1174.66); },                                                      // a new name on the board
+    count(){ if (audio()) tone(220, 0, .16, 'triangle', .6); },                                                          // the closing countdown
+  };
+  addEventListener('keydown', e => { if (e.key === 'm' || e.key === 'M') { sfxOn = !sfxOn; if (sfxOn) sfx.join(); } });
+  addEventListener('pointerdown', () => audio(), { once: true });
 
   function timeline(now){
     const cycle = T.ask + T.answer;
@@ -164,10 +197,11 @@
   function drawBoard(top, players){
     const key = JSON.stringify(top) + players;
     if (key === boardKey) return; boardKey = key;
+    if (lastPlayers >= 0 && players > lastPlayers && Date.now() - lastJoinSfx > 700) { lastJoinSfx = Date.now(); sfx.join(); }
+    lastPlayers = players;
     const ol = $('board'); ol.textContent = '';
     top.forEach((p, i) => {
       const li = document.createElement('li'); if (i === 0) li.className = 'first';
-      const id = p.name + '|' + i;
       if (scores[p.name] !== undefined && scores[p.name] !== p.score) li.classList.add('bump');
       const r = document.createElement('span'); r.className = 'r'; r.textContent = i + 1;
       const n = document.createElement('span'); n.className = 'n'; n.textContent = p.name;
@@ -198,8 +232,10 @@
       });
       $('fact').textContent = ''; $('stat').textContent = '';
       card.classList.remove('answer', 'swap'); void card.offsetWidth; card.classList.add('swap');
+      sfx.card();
     }
     if (rev) {
+      if (!card.classList.contains('answer')) sfx.reveal();
       [...$('answers').children].forEach((li, n) => li.classList.toggle('ok', n === rev.ok));
       $('fact').textContent = rev.fact;
       $('stat').textContent = rev.answered ? rev.answered + ' answered │ ' + Math.round(100 * rev.right / rev.answered) + '% got it' : '';
@@ -218,9 +254,12 @@
       document.body.classList.toggle('final-on', tl.closed);
       $('btitle').textContent = tl.closed ? 'Final standings' : 'Leaderboard';
       document.body.classList.toggle('out', left <= OUT_MS);
+      if (tl.closed && secs <= 10 && secs >= 2 && lastTick !== 'f' + secs) { lastTick = 'f' + secs; sfx.count(); }   // ten down to two, then silence
     }
     if (cards.length && !tl.closed) {
       drawCard(tl);
+      const secLeft = Math.ceil((T.ask - tl.into) / 1000);
+      if (!tl.reveal && secLeft <= 5 && secLeft >= 1 && lastTick !== tl.s + ':' + secLeft) { lastTick = tl.s + ':' + secLeft; sfx.tick(); }
       $('bar').style.transform = 'scaleX(' + (tl.reveal ? 0 : 1 - tl.into / T.ask) + ')';
       // the moment a card closes, fetch its answer straight away rather than waiting for the next poll
       if (tl.reveal && !reveals[tl.qi] && Date.now() - lastAsk > 450) { lastAsk = Date.now(); pull(); }

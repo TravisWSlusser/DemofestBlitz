@@ -14,6 +14,8 @@ param(
   [string]$ShowAt = '13:00',                    # clock time the talk starts (24h, laptop time; HH:mm or HH:mm:ss), or "+2" = two minutes from now
   [string]$Url    = 'https://demofest-blitz.vercel.app/preshow.html',
   [string]$Bg     = '000000',                   # unused by the current page (it fades to the deck background); kept for other decks
+  [string]$Music  = '',                         # folder of background music; empty = the "music" folder next to this script
+  [double]$MusicVolume = 0.5,                   # 0 to 1, on top of the laptop's own volume
   [switch]$Nudge                                # OFF by default. The laptop's policy locks the screen after 10 idle minutes. The script
                                                 # already asks Windows to keep the display on, the way a video player does. If a rehearsal
                                                 # shows the lock still arriving, -Nudge taps the unused F15 key every 4 minutes so Windows
@@ -144,16 +146,49 @@ public static class PreShowWin {
   } else { Say 'Could not find the kiosk window to pin it on top.' }
 
   # ---- 3. wait for show time (or for the kiosk window to be closed by hand), then reveal the deck
+  # ---- music: every audio file in the music folder, shuffled, played from this laptop. Nothing is streamed or uploaded.
+  # It fades in, moves to the next track when one ends, and is silent just over a second before the deck takes over.
+  $mp = $null; $tracks = @(); $script:ti = -1; $script:trackStart = Get-Date
+  $musicDir = if ($Music) { $Music } else { Join-Path $PSScriptRoot 'music' }
+  if (Test-Path -LiteralPath $musicDir) {
+    $tracks = @(Get-ChildItem -LiteralPath $musicDir -File | Where-Object { $_.Extension -match '^\.(mp3|wav|m4a|aac|wma|flac)$' } | Sort-Object { Get-Random })
+  }
+  if ($tracks.Count) {
+    try { Add-Type -AssemblyName PresentationCore, WindowsBase; $mp = New-Object System.Windows.Media.MediaPlayer }
+    catch { Say "Music unavailable: $($_.Exception.Message)" }
+  } else { Say "No music files in $musicDir. The pre-show runs without music." }
+  function NextTrack {
+    $script:ti = ($script:ti + 1) % $tracks.Count
+    $f = $tracks[$script:ti]
+    try { $mp.Stop(); $mp.Open([uri]$f.FullName); $mp.Volume = 0; $mp.Play(); $script:trackStart = Get-Date; Say "Music: $($f.BaseName)" }
+    catch { Say "Could not play $($f.Name): $($_.Exception.Message)" }
+  }
+  if ($mp) { NextTrack }
+
   $nextNudge = (Get-Date).AddSeconds(240)
   if ($Nudge) { Say 'Nudge is on: an F15 key tap every 4 minutes keeps the idle lock away.' }
   while ((Get-Date) -lt $target) {
     Start-Sleep -Milliseconds 200
     if (-not (KioskProcs)) { Say 'Kiosk closed by hand; revealing the deck now.'; break }
+    if ($mp) {
+      $now = Get-Date; $left = ($target - $now).TotalSeconds; $played = ($now - $script:trackStart).TotalSeconds
+      $v = $MusicVolume * [Math]::Min(1, $played / 2)                         # two-second fade in
+      if ($left -lt 6) { $v = $v * [Math]::Max(0, ($left - 1.2) / 4.8) }      # fade out; silent 1.2 s before the deck
+      $ended = $false
+      try {
+        $mp.Volume = $v
+        if ($mp.NaturalDuration.HasTimeSpan) { $ended = $mp.Position -ge $mp.NaturalDuration.TimeSpan.Subtract([TimeSpan]::FromMilliseconds(350)) }
+        elseif ($played -gt 8 -and $mp.Position.TotalSeconds -lt 0.5) { $ended = $true }   # a file that never started
+      } catch {}
+      if ($ended -and $left -gt 8) { NextTrack }
+    }
     if ($Nudge -and (Get-Date) -ge $nextNudge) {
       [PreShowWin]::keybd_event(0x7E, 0, 0, [UIntPtr]::Zero); [PreShowWin]::keybd_event(0x7E, 0, 2, [UIntPtr]::Zero)   # F15 down, up
       $nextNudge = (Get-Date).AddSeconds(240)
     }
   }
+  if ($mp) { try { $mp.Stop(); $mp.Close() } catch {} }
+
   # By now the page has let its words fade and shows only the deck's background. Start slide 1 while the slideshow is
   # still hidden under the browser, then lift it above the browser and give it the keyboard, and only then close the
   # browser. Same background on both, so the title simply arrives; no other window can flash through.
