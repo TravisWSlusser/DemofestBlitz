@@ -192,7 +192,7 @@ public static class PreShowWin {
   # a welcome just after the start, a standings update at an answer reveal roughly every two minutes (every fifth
   # card), and the winner over the closing countdown. Each request says when the line will start playing, so the
   # server can put its captions on the big screen and the phones at that moment.
-  # (Schedule continued:) Each line is requested several seconds early because the
+  # Each line is requested several seconds early because the
   # expressive voice model takes a moment; one that fails or arrives too late is simply skipped.
   $plan = New-Object System.Collections.ArrayList; $vp = $null
   $script:voiceOn = $false; $script:voiceStart = Get-Date; $script:duck = 1.0

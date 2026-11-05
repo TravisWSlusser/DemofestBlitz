@@ -332,13 +332,25 @@ function captionParts(line, totalMs, alignment) {
     for (const raw of text.match(/[^.!?\u2026]+(?:[.!?\u2026]+|$)\s*/g) || [text]) {
       const sentence = raw.trim();
       if (!sentence) continue;
-      const limit = Math.min(CAPTION_MAX, Math.ceil(sentence.length / Math.ceil(sentence.length / CAPTION_MAX)) + 6);
+      // pack whole clauses (up to a comma) into a phrase while they fit; only a clause that is too long by itself is
+      // broken between words, into even pieces
       let piece = '';
-      for (const word of sentence.split(' ')) {
-        if (piece && (piece + ' ' + word).length > limit) { phrases.push(piece); piece = word; }
-        else piece = piece ? piece + ' ' + word : word;
+      const flush = () => { if (piece) { phrases.push(piece); piece = ''; } };
+      for (const c0 of sentence.match(/[^,;:]+[,;:]*s*/g) || [sentence]) {
+        const clause = c0.trim();
+        if (!clause) continue;
+        if (clause.length > CAPTION_MAX) {
+          flush();
+          const limit = Math.ceil(clause.length / Math.ceil(clause.length / CAPTION_MAX)) + 6;
+          for (const word of clause.split(' ')) {
+            if (piece && (piece + ' ' + word).length > limit) flush();
+            piece = piece ? piece + ' ' + word : word;
+          }
+          flush();
+        } else if (piece && (piece + ' ' + clause).length > CAPTION_MAX) { flush(); piece = clause; }
+        else piece = piece ? piece + ' ' + clause : clause;
       }
-      if (piece) phrases.push(piece);
+      flush();
     }
   }
   if (!phrases.length) return { parts: [], exact: false };
@@ -399,7 +411,7 @@ async function announce(req, res) {
   const playAt = Number.isFinite(play) && play > now - 10000 && play < now + 120000 ? Math.round(play) : 0;
   // the welcome is the same for every show, so it is stored once for all of them; a changed text or voice makes a new row
   const rowShow = kind === 'welcome' ? '*' : show;
-  const slot = kind === 'welcome' ? 'welcome:' + VOICE_ID + ':' + VOICE_MODELS[0] + ':' + WELCOME.length : kind === 'mid' ? 'mid:' + t.s : 'final';
+  const slot = kind === 'welcome' ? 'welcome:timed:' + VOICE_ID + ':' + VOICE_MODELS[0] + ':' + WELCOME.length : kind === 'mid' ? 'mid:' + t.s : 'final';
   const send = async (line, b64, cues, ms) => {
     if (playAt) {
       await sql`INSERT INTO preshow_live (show, play_at, ms, cues) VALUES (${show}, ${playAt}, ${ms}, ${cues})
