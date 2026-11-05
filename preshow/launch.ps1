@@ -28,6 +28,11 @@ param(
                                                 # sees activity. That sidesteps the auto-lock while the pre-show runs: the owner's call.
 )
 $ErrorActionPreference = 'Stop'
+
+# ---- high-DPI from the first line. The audio players switch this process to high-DPI the moment one is created;
+# doing it here, before any window exists, keeps every size and position in one consistent unit (real pixels).
+Add-Type -Namespace PreShow -Name Dpi -MemberDefinition '[DllImport("user32.dll")] public static extern bool SetProcessDPIAware();'
+[void][PreShow.Dpi]::SetProcessDPIAware()
 $log = Join-Path $PSScriptRoot 'last-run.log'
 
 # ---- one pre-show at a time. A second launch (an extra double-click, or the other shortcut) leaves at once and
@@ -62,24 +67,29 @@ function Show-StartScreen([string]$deckName, [string]$whenText, [object[]]$track
   }
   $heavy = Fam @('Encode Sans Condensed Black', 'Encode Sans Black', 'Segoe UI Black', 'Segoe UI')
   $plain = Fam @('Encode Sans Medium', 'Encode Sans', 'Segoe UI Semibold', 'Segoe UI')
+  # the layout below is drawn for a 960 x 540 window at 100%. Fonts are in points and scale with the display by
+  # themselves; S() scales the pixel positions and sizes to match (2x on a 200% laptop screen).
+  $g0 = [System.Drawing.Graphics]::FromHwnd([IntPtr]::Zero); $k = $g0.DpiX / 96.0; $g0.Dispose()
+  function S([double]$n) { return [int][Math]::Round($n * $k) }
 
   $form = New-Object System.Windows.Forms.Form
   $form.Text = 'Session 609 Pre-Show'; $form.FormBorderStyle = 'None'; $form.StartPosition = 'CenterScreen'
-  $form.ClientSize = New-Object System.Drawing.Size(960, 540); $form.BackColor = $dark; $form.TopMost = $true; $form.KeyPreview = $true
+  $form.ClientSize = New-Object System.Drawing.Size((S 960), (S 540)); $form.BackColor = $dark; $form.TopMost = $true; $form.KeyPreview = $true
+  $form.AutoScaleMode = [System.Windows.Forms.AutoScaleMode]::None      # laid out in fixed pixels; Windows scales the whole window
   $bgPath = Join-Path $PSScriptRoot '..\assets\preshow\bg.jpg'
   if (Test-Path -LiteralPath $bgPath) { $form.BackgroundImage = [System.Drawing.Image]::FromFile((Resolve-Path -LiteralPath $bgPath).Path); $form.BackgroundImageLayout = 'Stretch' }
   function Lbl([string]$text, $font, $color, [int]$x, [int]$y) {
     $l = New-Object System.Windows.Forms.Label; $l.Text = $text; $l.Font = $font; $l.ForeColor = $color; $l.BackColor = [System.Drawing.Color]::Transparent
-    $l.AutoSize = $true; $l.UseMnemonic = $false; $l.Location = New-Object System.Drawing.Point($x, $y); $form.Controls.Add($l); return $l
+    $l.AutoSize = $true; $l.UseMnemonic = $false; $l.Location = New-Object System.Drawing.Point((S $x), (S $y)); $form.Controls.Add($l); return $l
   }
   function Btn([string]$text, [int]$x, [int]$w, $back, $fore, $border) {
-    $b = New-Object System.Windows.Forms.Button; $b.Text = $text; $b.Font = Fnt $heavy 17; $b.Size = New-Object System.Drawing.Size($w, 62); $b.Location = New-Object System.Drawing.Point($x, 404)
-    $b.FlatStyle = 'Flat'; $b.BackColor = $back; $b.ForeColor = $fore; $b.FlatAppearance.BorderColor = $border; $b.FlatAppearance.BorderSize = 2
+    $b = New-Object System.Windows.Forms.Button; $b.Text = $text; $b.Font = Fnt $heavy 17; $b.Size = New-Object System.Drawing.Size((S $w), (S 62)); $b.Location = New-Object System.Drawing.Point((S $x), (S 404))
+    $b.FlatStyle = 'Flat'; $b.BackColor = $back; $b.ForeColor = $fore; $b.FlatAppearance.BorderColor = $border; $b.FlatAppearance.BorderSize = (S 2)
     $b.Cursor = [System.Windows.Forms.Cursors]::Hand; $b.TabStop = $false; $b.UseMnemonic = $false; $form.Controls.Add($b); return $b
   }
   $h1 = Lbl '00. PRE-SHOW' (Fnt $heavy 20) $white 50 36
-  [void](Lbl 'SESSION 609' (Fnt $plain 17) $green (50 + $h1.PreferredWidth + 12) 40)
-  $esc = Lbl 'ESC TO CLOSE' (Fnt $plain 10) $green 0 46; $esc.Location = New-Object System.Drawing.Point((960 - 52 - $esc.PreferredWidth), 46); $esc.Cursor = [System.Windows.Forms.Cursors]::Hand
+  [void](Lbl 'SESSION 609' (Fnt $plain 17) $green (50 + [int]($h1.PreferredWidth / $k) + 12) 40)
+  $esc = Lbl 'ESC TO CLOSE' (Fnt $plain 10) $green 0 46; $esc.Location = New-Object System.Drawing.Point(((S 908) - $esc.PreferredWidth), (S 46)); $esc.Cursor = [System.Windows.Forms.Cursors]::Hand
   [void](Lbl 'READY WHEN YOU ARE' (Fnt $heavy 44) $white 42 176)
   $rows = @(@('DECK', $deckName.ToUpper()), @('DECK TAKES OVER', $whenText.ToUpper()), @('MUSIC', $(if ($tracks.Count) { "$($tracks.Count) TRACKS, SHUFFLED" } else { 'NO MUSIC FILES FOUND' })))
   for ($i = 0; $i -lt $rows.Count; $i++) { [void](Lbl $rows[$i][0] (Fnt $plain 11) $green 52 (286 + $i * 30)); [void](Lbl $rows[$i][1] (Fnt $plain 11) $white 250 (286 + $i * 30)) }
