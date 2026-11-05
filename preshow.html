@@ -60,12 +60,12 @@
   .result .k { font-weight: 500; font-size: 1.46cqw; color: var(--green); letter-spacing: .04em; }
   .result .wait { font-weight: 300; font-size: 2.2cqw; color: var(--soft); margin-top: 1.2cqh; }
   .result .cat { font-stretch: 75%; font-weight: 900; font-size: 4.4cqw; line-height: 1; margin: 1.2cqh 0 2cqh; text-wrap: balance; display: none; }
-  .result .worth { display: none; align-items: baseline; gap: 1.2cqw; }
-  .result .pts { font-stretch: 75%; font-weight: 900; font-size: 3.4cqw; color: var(--green); }
-  .result .tier { font-weight: 300; font-size: 1.9cqw; color: var(--soft); }
+  .result .worth { display: none; }
+  .result .pts { font-stretch: 75%; font-weight: 900; font-size: 3.4cqw; line-height: 1; color: var(--green); white-space: nowrap; display: block; }
+  .result .tier { font-weight: 300; font-size: 1.9cqw; color: var(--soft); white-space: nowrap; display: block; margin-top: .8cqh; }
   .spin.landed .wait { display: none; }
   .spin.landed .cat { display: block; animation: rise .45s ease both; }
-  .spin.landed .worth { display: flex; animation: rise .45s .12s ease both; }
+  .spin.landed .worth { display: block; animation: rise .45s .12s ease both; }
 
   /* the card: bottom-left, like the title slide */
   body[data-ph="ask"] .card, body[data-ph="answer"] .card { display: block; }
