@@ -99,7 +99,7 @@ function Show-StartScreen([string]$deckName, [string]$whenText, [object[]]$track
   [void](Lbl 'ADMIN PHONE' (Fnt $plain 11) $green 52 354)
   $pairLbl = Lbl $(if (Test-Path -LiteralPath $hashFile) { 'PAIRED. TO PAIR ANOTHER PHONE, TYPE ITS CODE:' } else { 'NOT PAIRED. TYPE THE CODE FROM YOUR PHONE:' }) (Fnt $plain 11) $white 250 354
   $tb = New-Object System.Windows.Forms.TextBox; $tb.Font = Fnt $plain 11; $tb.MaxLength = 6; $tb.CharacterCasing = 'Upper'; $tb.BorderStyle = 'FixedSingle'; $tb.TextAlign = 'Center'; $tb.TabStop = $false
-  $tb.BackColor = [System.Drawing.Color]::FromArgb(24, 30, 32); $tb.ForeColor = $white; $tb.Location = New-Object System.Drawing.Point((S 712), (S 351)); $tb.Width = (S 96); $form.Controls.Add($tb)
+  $tb.BackColor = $white; $tb.ForeColor = $dark; $tb.Location = New-Object System.Drawing.Point((S 712), (S 351)); $tb.Width = (S 96); $form.Controls.Add($tb)
   $bPair = New-Object System.Windows.Forms.Button; $bPair.Text = 'PAIR'; $bPair.Font = Fnt $heavy 10; $bPair.Size = New-Object System.Drawing.Size((S 92), (S 28)); $bPair.Location = New-Object System.Drawing.Point((S 816), (S 349))
   $bPair.FlatStyle = 'Flat'; $bPair.BackColor = [System.Drawing.Color]::FromArgb(24, 30, 32); $bPair.ForeColor = $white; $bPair.FlatAppearance.BorderColor = $white; $bPair.FlatAppearance.BorderSize = 1
   $bPair.Cursor = [System.Windows.Forms.Cursors]::Hand; $bPair.TabStop = $false; $bPair.UseMnemonic = $false; $form.Controls.Add($bPair)
