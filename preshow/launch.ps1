@@ -55,8 +55,9 @@ Set-Content -Path $log -Value "Pre-show run $(Get-Date -Format 'yyyy-MM-dd HH:mm
 #   AUDIO TEST       one soft chime through the speakers, to prove the laptop's sound is reaching the room.
 #   LAUNCH PRE SHOW  starts the pre-show, on the second press: the first press only arms the button.
 #                    A "+10" show time starts counting from that second press.
+# A fourth line pairs the presenter's phone as the control room: the phone shows a code, it is typed here.
 # Esc closes the window without starting anything. Returns 'launch' or 'cancel'.
-function Show-StartScreen([string]$deckName, [string]$whenText, [object[]]$tracks) {
+function Show-StartScreen([string]$deckName, [string]$whenText, [object[]]$tracks, [string]$site) {
   Add-Type -AssemblyName System.Windows.Forms, System.Drawing
   $green = [System.Drawing.Color]::FromArgb(0, 176, 80); $dark = [System.Drawing.Color]::FromArgb(11, 14, 15)
   $white = [System.Drawing.Color]::White; $soft = [System.Drawing.Color]::FromArgb(190, 196, 198)
@@ -92,7 +93,16 @@ function Show-StartScreen([string]$deckName, [string]$whenText, [object[]]$track
   $esc = Lbl 'ESC TO CLOSE' (Fnt $plain 10) $green 0 46; $esc.Location = New-Object System.Drawing.Point(((S 908) - $esc.PreferredWidth), (S 46)); $esc.Cursor = [System.Windows.Forms.Cursors]::Hand
   [void](Lbl 'READY WHEN YOU ARE' (Fnt $heavy 44) $white 42 176)
   $rows = @(@('DECK', $deckName.ToUpper()), @('DECK TAKES OVER', $whenText.ToUpper()), @('MUSIC', $(if ($tracks.Count) { "$($tracks.Count) TRACKS, SHUFFLED" } else { 'NO MUSIC FILES FOUND' })))
-  for ($i = 0; $i -lt $rows.Count; $i++) { [void](Lbl $rows[$i][0] (Fnt $plain 11) $green 52 (286 + $i * 30)); [void](Lbl $rows[$i][1] (Fnt $plain 11) $white 250 (286 + $i * 30)) }
+  for ($i = 0; $i -lt $rows.Count; $i++) { [void](Lbl $rows[$i][0] (Fnt $plain 11) $green 52 (270 + $i * 28)); [void](Lbl $rows[$i][1] (Fnt $plain 11) $white 250 (270 + $i * 28)) }
+  # the fourth line pairs the presenter's phone as the control room (how that is trusted: see api/preshow.js)
+  $hashFile = Join-Path $PSScriptRoot 'admin-phone.hash'
+  [void](Lbl 'ADMIN PHONE' (Fnt $plain 11) $green 52 354)
+  $pairLbl = Lbl $(if (Test-Path -LiteralPath $hashFile) { 'PAIRED. TO PAIR ANOTHER PHONE, TYPE ITS CODE:' } else { 'NOT PAIRED. TYPE THE CODE FROM YOUR PHONE:' }) (Fnt $plain 11) $white 250 354
+  $tb = New-Object System.Windows.Forms.TextBox; $tb.Font = Fnt $plain 11; $tb.MaxLength = 6; $tb.CharacterCasing = 'Upper'; $tb.BorderStyle = 'FixedSingle'; $tb.TextAlign = 'Center'; $tb.TabStop = $false
+  $tb.BackColor = [System.Drawing.Color]::FromArgb(24, 30, 32); $tb.ForeColor = $white; $tb.Location = New-Object System.Drawing.Point((S 712), (S 351)); $tb.Width = (S 96); $form.Controls.Add($tb)
+  $bPair = New-Object System.Windows.Forms.Button; $bPair.Text = 'PAIR'; $bPair.Font = Fnt $heavy 10; $bPair.Size = New-Object System.Drawing.Size((S 92), (S 28)); $bPair.Location = New-Object System.Drawing.Point((S 816), (S 349))
+  $bPair.FlatStyle = 'Flat'; $bPair.BackColor = [System.Drawing.Color]::FromArgb(24, 30, 32); $bPair.ForeColor = $white; $bPair.FlatAppearance.BorderColor = $white; $bPair.FlatAppearance.BorderSize = 1
+  $bPair.Cursor = [System.Windows.Forms.Cursors]::Hand; $bPair.TabStop = $false; $bPair.UseMnemonic = $false; $form.Controls.Add($bPair)
   $bTest = Btn 'AUDIO TEST' 52 250 ([System.Drawing.Color]::FromArgb(24, 30, 32)) $white $white
   $bGo = Btn 'LAUNCH PRE SHOW' 318 340 $green $dark $green
   $status = Lbl 'AUDIO TEST PLAYS ONE SOFT CHIME THROUGH THE SPEAKERS.' (Fnt $plain 10) $soft 52 486
@@ -116,7 +126,24 @@ function Show-StartScreen([string]$deckName, [string]$whenText, [object[]]$track
 
   # what the button handlers need lives in one script-level table
   $script:ss = @{ result = 'cancel'; form = $form; status = $status; wav = $wav; player = (New-Object System.Media.SoundPlayer); count = 0
-                  bTest = $bTest; bGo = $bGo; green = $green; armedAt = $null }
+                  bTest = $bTest; bGo = $bGo; green = $green; armedAt = $null
+                  tb = $tb; bPair = $bPair; pairLbl = $pairLbl; site = $site; hashFile = $hashFile; host = $(if ($site) { ([uri]$site).Host.ToUpper() } else { '' }) }
+  # PAIR: ask the server which phone is behind the typed code and remember it (only a hash, nothing secret) on this laptop
+  $script:ss.pairNow = {
+    $s = $script:ss; $code = $s.tb.Text.Trim().ToUpper()
+    if ($code -notmatch '^[A-Z0-9]{6}$') { $s.status.Text = 'ON YOUR PHONE OPEN ' + $s.host + '/ADMIN. TYPE THE SIX-CHARACTER CODE IT SHOWS, THEN PRESS PAIR.'; return }
+    try {
+      [Net.ServicePointManager]::SecurityProtocol = [Net.ServicePointManager]::SecurityProtocol -bor [Net.SecurityProtocolType]::Tls12
+      $r = Invoke-RestMethod -Uri "$($s.site)/api/preshow/pair?code=$code" -TimeoutSec 8
+      if ("$($r.hash)" -notmatch '^[0-9a-f]{64}$') { throw 'no pairing' }
+      Set-Content -LiteralPath $s.hashFile -Value $r.hash -Encoding ASCII
+      $s.tb.Text = ''; $s.pairLbl.Text = 'PAIRED. TO PAIR ANOTHER PHONE, TYPE ITS CODE:'
+      $s.status.Text = 'PHONE PAIRED. ITS DASHBOARD COMES ALIVE WHEN THE PRE-SHOW LAUNCHES.'
+    } catch { $s.status.Text = 'THAT CODE WAS NOT FOUND OR HAS EXPIRED. CHECK THE PHONE AND TRY AGAIN.' }
+  }
+  $bPair.Add_Click({ & $script:ss.pairNow })
+  $tb.Add_KeyDown({ param($sender, $e) if ($e.KeyCode -eq [System.Windows.Forms.Keys]::Enter) { $e.SuppressKeyPress = $true; & $script:ss.pairNow } })
+  $tb.Add_Enter({ $script:ss.status.Text = 'ON YOUR PHONE OPEN ' + $script:ss.host + '/ADMIN. TYPE THE CODE IT SHOWS, THEN PRESS PAIR.' })
   $bTest.Add_Click({
     $s = $script:ss
     try {
@@ -166,7 +193,7 @@ try {
   if (-not $NoMenu) {
     $menuDir = if ($Music) { $Music } else { Join-Path $PSScriptRoot 'music' }
     $menuTracks = @(); if (Test-Path -LiteralPath $menuDir) { $menuTracks = @(Get-ChildItem -LiteralPath $menuDir -File | Where-Object { $_.Extension -match '^\.(mp3|wav|m4a|aac|wma|flac)$' }) }
-    $choice = Show-StartScreen (Split-Path $Deck -Leaf) $whenText $menuTracks
+    $choice = Show-StartScreen (Split-Path $Deck -Leaf) $whenText $menuTracks (([uri]$Url).GetLeftPart([UriPartial]::Authority))
     if ($choice -ne 'launch') { Say 'The start screen was closed without launching.'; exit 0 }
     Say 'LAUNCH PRE SHOW pressed.'
   }
@@ -196,6 +223,18 @@ try {
   }
   if ($bestRtt -ne [double]::MaxValue) { Say ("Game server reached. Its clock is {0:N0} ms from this laptop's." -f $script:srvOffsetMs) }
   function SNow { (Get-Date).AddMilliseconds($script:srvOffsetMs) }
+
+  # ---- hand this show to the paired admin phone (see "the control room" in api/preshow.js). A show can be claimed
+  # once, and this happens before its id is ever on screen. With no phone paired a throwaway hash is used, so the
+  # show still cannot be claimed by anyone else.
+  $hashFile = Join-Path $PSScriptRoot 'admin-phone.hash'; $adminHash = ''
+  if (Test-Path -LiteralPath $hashFile) { $adminHash = "$(Get-Content -LiteralPath $hashFile -TotalCount 1)".Trim() }
+  $phone = $adminHash -match '^[0-9a-f]{64}$'
+  if (-not $phone) { $rb = New-Object byte[] 32; [System.Security.Cryptography.RandomNumberGenerator]::Create().GetBytes($rb); $adminHash = -join ($rb | ForEach-Object { $_.ToString('x2') }) }
+  try {
+    $cr = Invoke-RestMethod -Method Post -Uri "$site/api/preshow/claim" -ContentType 'application/json' -Body (@{ show = "$atMs"; hash = $adminHash } | ConvertTo-Json -Compress) -TimeoutSec 8
+    if ($cr.ok -and $phone) { Say 'The paired admin phone now controls this show.' } elseif ($cr.ok) { Say 'No admin phone is paired. The show is closed to outside control.' } else { Say 'This show had already been claimed by another device.' }
+  } catch { Say "Could not register the admin phone: $($_.Exception.Message)" }
 
   Add-Type @"
 using System; using System.Runtime.InteropServices;

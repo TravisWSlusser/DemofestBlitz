@@ -13,10 +13,14 @@
 //   POST join   { show, name }                                   → { token, name }
 //   POST answer { show, choice }   (header X-Player-Token)       → { ok, pick }
 //   GET  announce?show=&kind=&play=                           the announcer's next line as mp3; registers its captions
+//   POST pair { hash } / GET pair?code=                          pair the presenter's phone with the launcher
+//   POST claim { show, hash }                                    the launcher claims a show for the paired phone
+//   GET  admin   (header X-Admin-Token)                          the control room: everything about the claimed show
+//   POST kick { id }  (header X-Admin-Token)                     remove a player
 //   GET  results  (header X-Admin-Key)                           CSV of every player in every show
 //   POST reset    (header X-Admin-Key)                           empties the two pre-show tables
 import { neon } from '@neondatabase/serverless';
-import { randomBytes } from 'node:crypto';
+import { randomBytes, createHash } from 'node:crypto';
 import { QUESTIONS } from './_preshow-questions.js';
 
 const CONN = process.env.DATABASE_URL
@@ -69,6 +73,10 @@ function ensureTables() {
         created_at  timestamptz NOT NULL DEFAULT now(),
         PRIMARY KEY (show, slot)
       )`;
+      await sql`ALTER TABLE preshow_players ADD COLUMN IF NOT EXISTS last_seen timestamptz NOT NULL DEFAULT now()`;
+      // the control room: phone pairing codes, and which phone (by the hash of its token) administers which show
+      await sql`CREATE TABLE IF NOT EXISTS preshow_pair (code text PRIMARY KEY, hash text NOT NULL, created_at timestamptz NOT NULL DEFAULT now(), taken_at timestamptz)`;
+      await sql`CREATE TABLE IF NOT EXISTS preshow_admin (show text PRIMARY KEY, hash text NOT NULL, created_at timestamptz NOT NULL DEFAULT now())`;
       await sql`ALTER TABLE preshow_voice ADD COLUMN IF NOT EXISTS cues text`;
       await sql`ALTER TABLE preshow_voice ADD COLUMN IF NOT EXISTS ms integer`;
       // the line being spoken right now in each show: when it starts (server time) and its captions, phrase by phrase.
@@ -171,6 +179,7 @@ async function state(req, res) {
       const [rk, mine] = await Promise.all([
         sql`SELECT COUNT(*)::int + 1 AS rank FROM preshow_players WHERE show = ${show} AND score > ${p.score}`,
         sql`SELECT choice, correct, pts FROM preshow_answers WHERE player_id = ${p.id} AND qi = ${t.qi}`,
+        sql`UPDATE preshow_players SET last_seen = now() WHERE id = ${p.id}`,          // "connected now" in the control room
       ]);
       out.me = { name: p.name, score: p.score, correct: p.correct, answered: p.answered, rank: rk[0].rank, pick: mine.length ? mine[0].choice : null };
       if (mine.length && t.reveal) { out.me.right = mine[0].correct; out.me.pts = mine[0].pts; }
@@ -224,7 +233,7 @@ async function answer(req, res) {
     const ex = await sql`SELECT choice FROM preshow_answers WHERE player_id = ${pid} AND qi = ${t.qi}`;
     return res.status(200).json({ ok: true, dup: true, pick: ex.length ? ex[0].choice : choice });
   }
-  await sql`UPDATE preshow_players SET score = score + ${pts}, correct = correct + ${correct ? 1 : 0}, answered = answered + 1 WHERE id = ${pid}`;
+  await sql`UPDATE preshow_players SET score = score + ${pts}, correct = correct + ${correct ? 1 : 0}, answered = answered + 1, last_seen = now() WHERE id = ${pid}`;
   return res.status(200).json({ ok: true, pick: choice });
 }
 
@@ -247,8 +256,111 @@ async function reset(req, res) {
   await sql`TRUNCATE preshow_answers, preshow_players RESTART IDENTITY`;
   await sql`TRUNCATE preshow_voice`;
   await sql`TRUNCATE preshow_live`;
+  await sql`TRUNCATE preshow_admin`;
   cache.clear();
   return res.status(200).json({ ok: true });
+}
+
+// ── the control room ─────────────────────────────────────────────────────────
+// One phone gets a private dashboard: every player, who is connected, what the room is answering, the right answer
+// before the reveal, and a button to remove a player. How that phone is trusted, with no password to type and no
+// secret in any link:
+//   1. The phone makes up a long random token, keeps it to itself, and sends only its SHA-256 here (POST pair).
+//      It gets back a six-character code to show on its screen.
+//   2. The presenter types that code into the launcher's start screen. The launcher asks for the hash behind the
+//      code (GET pair?code=) and keeps it on the laptop.
+//   3. Every time a pre-show launches, the launcher claims the new show for that hash (POST claim). A show can be
+//      claimed once, and the launcher does it before the show's id is ever on screen, so nobody can get in first.
+//      (With no phone paired the launcher still claims, with a throwaway hash, so the show is never left open.)
+//   4. The phone sends its token in a header; whoever holds the token whose hash claimed the show is the admin.
+const sha256 = v => createHash('sha256').update(String(v)).digest('hex');
+const adminTokenOf = req => String(req.headers['x-admin-token'] || '').slice(0, 128);
+const PAIR_ALPHABET = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';   // no 0/O, 1/I/L: easy to read off a phone and type
+
+async function pair(req, res) {
+  await ensureTables();
+  if (req.method === 'POST') {                                            // the phone asks for a code
+    const hash = String(body(req).hash || '').toLowerCase();
+    if (!/^[0-9a-f]{64}$/.test(hash)) return res.status(400).json({ error: 'bad request' });
+    const have = await sql`SELECT code FROM preshow_pair WHERE hash = ${hash} AND taken_at IS NULL AND created_at > now() - interval '15 minutes' ORDER BY created_at DESC LIMIT 1`;
+    if (have.length) return res.status(200).json({ ok: true, code: have[0].code });
+    await sql`DELETE FROM preshow_pair WHERE taken_at IS NULL AND created_at < now() - interval '1 day'`;
+    for (let i = 0; i < 5; i++) {
+      let code = '';
+      for (const b of randomBytes(6)) code += PAIR_ALPHABET[b % PAIR_ALPHABET.length];
+      const ins = await sql`INSERT INTO preshow_pair (code, hash) VALUES (${code}, ${hash}) ON CONFLICT (code) DO NOTHING RETURNING code`;
+      if (ins.length) return res.status(200).json({ ok: true, code });
+    }
+    return res.status(503).json({ error: 'try again' });
+  }
+  const code = String(req.query.code || '').toUpperCase();                // the laptop redeems a code, once
+  if (!/^[A-Z0-9]{6}$/.test(code)) return res.status(400).json({ error: 'bad code' });
+  const got = await sql`UPDATE preshow_pair SET taken_at = now() WHERE code = ${code} AND taken_at IS NULL AND created_at > now() - interval '15 minutes' RETURNING hash`;
+  if (!got.length) return res.status(404).json({ error: 'That code was not found or has expired.' });
+  return res.status(200).json({ ok: true, hash: got[0].hash });
+}
+
+async function claim(req, res) {
+  if (req.method !== 'POST') return res.status(405).json({ error: 'POST only' });
+  await ensureTables();
+  const b = body(req), show = showOf(b.show), hash = String(b.hash || '').toLowerCase(), now = Date.now();
+  if (show === 'preview' || Number(show) < now || Number(show) > now + 30 * 60000 || !/^[0-9a-f]{64}$/.test(hash)) return res.status(400).json({ error: 'bad request' });
+  await sql`INSERT INTO preshow_admin (show, hash) VALUES (${show}, ${hash}) ON CONFLICT (show) DO NOTHING`;
+  const row = await sql`SELECT hash FROM preshow_admin WHERE show = ${show}`;
+  return res.status(200).json({ ok: row.length > 0 && row[0].hash === hash });
+}
+
+/* The show this request may administer: the most recent one claimed for the caller's token. */
+async function adminShow(req) {
+  const token = adminTokenOf(req);
+  if (token.length < 16) return { hash: null, show: null };
+  const hash = sha256(token);
+  const row = await sql`SELECT show FROM preshow_admin WHERE hash = ${hash} ORDER BY created_at DESC LIMIT 1`;
+  return { hash, show: row.length ? row[0].show : null };
+}
+
+async function admin(req, res) {
+  await ensureTables();
+  const who = await adminShow(req);
+  if (!who.hash) return res.status(401).json({ error: 'no token' });
+  if (!who.show) {
+    const p = await sql`SELECT 1 FROM preshow_pair WHERE hash = ${who.hash} AND taken_at IS NOT NULL LIMIT 1`;
+    return res.status(200).json({ ok: true, paired: p.length > 0, show: null, now: Date.now() });
+  }
+  const show = who.show, t = timeline(show, Date.now()), c = QUESTIONS[t.qi];
+  const [board, agg, dist, voice] = await Promise.all([
+    sql`SELECT id, name, score, correct, answered, (last_seen > now() - interval '45 seconds') AS online
+        FROM preshow_players WHERE show = ${show} ORDER BY score DESC, id ASC LIMIT 300`,
+    sql`SELECT COUNT(*)::int AS players, COALESCE(SUM(answered), 0)::int AS answers, COALESCE(SUM(correct), 0)::int AS correct,
+               (COUNT(*) FILTER (WHERE last_seen > now() - interval '45 seconds'))::int AS online
+        FROM preshow_players WHERE show = ${show}`,
+    sql`SELECT a.choice, COUNT(*)::int AS n FROM preshow_answers a JOIN preshow_players p ON p.id = a.player_id
+        WHERE p.show = ${show} AND a.qi = ${t.qi} GROUP BY a.choice`,
+    sql`SELECT line FROM preshow_voice WHERE show = ${show} ORDER BY created_at DESC LIMIT 1`,
+  ]);
+  const counts = [0, 0, 0, 0];
+  for (const d of dist) if (d.choice >= 0 && d.choice < 4) counts[d.choice] = d.n;
+  return res.status(200).json({
+    ok: true, paired: true, show, at: Number(show), ask: ASK_MS, answer: ANSWER_MS, final: FINAL_MS, n: QUESTIONS.length,
+    qi: t.qi, into: t.into, reveal: t.reveal, closed: t.closed,
+    players: agg[0].players, online: agg[0].online, answers: agg[0].answers, correct: agg[0].correct,
+    card: { q: c.q, a: c.a, ok: c.ok, counts },
+    board: board.map(r => ({ id: r.id, name: r.name, score: r.score, correct: r.correct, answered: r.answered, online: !!r.online })),
+    voice: voice.length ? voice[0].line.replace(/\s*\[[^\]]*\]\s*/g, ' ').replace(/six oh nine/gi, '609').trim() : '',
+    now: Date.now(),
+  });
+}
+
+async function kick(req, res) {
+  if (req.method !== 'POST') return res.status(405).json({ error: 'POST only' });
+  await ensureTables();
+  const who = await adminShow(req);
+  if (!who.show) return res.status(401).json({ error: 'not the admin of a show' });
+  const id = Number(body(req).id);
+  if (!Number.isInteger(id)) return res.status(400).json({ error: 'bad id' });
+  const gone = await sql`DELETE FROM preshow_players WHERE id = ${id} AND show = ${who.show} RETURNING name`;   // their answers go with them
+  cache.delete('board:' + who.show);
+  return res.status(200).json({ ok: gone.length > 0, name: gone.length ? gone[0].name : null });
 }
 
 // ── the announcer ───────────────────────────────────────────────────────────
@@ -470,7 +582,7 @@ async function announce(req, res) {
 
 export const config = { maxDuration: 30 };
 
-const HANDLERS = { state, join, answer, results, reset, announce };
+const HANDLERS = { state, join, answer, results, reset, announce, pair, claim, admin, kick };
 
 export default async function handler(req, res) {
   res.setHeader('Cache-Control', 'no-store');

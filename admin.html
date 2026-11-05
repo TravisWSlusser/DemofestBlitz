@@ -1,0 +1,222 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0b0e0f">
+<meta name="robots" content="noindex">
+<title>Control room · Session 609</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Encode+Sans+SC:wdth,wght@75,300;75,400;75,500;75,900;100,300;100,400;100,500&display=swap" rel="stylesheet">
+<style>
+  /* The presenter's private view of the pre-show game, for one paired phone. Same dress as the deck. */
+  :root { --green: #00B050; --white: #FFFFFF; --soft: rgba(255,255,255,.72); --line: rgba(255,255,255,.14); --red: #ff8a7a; }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body { margin: 0; min-height: 100%; background: #0b0e0f; }
+  body { font-family: 'Encode Sans SC', 'Segoe UI', system-ui, sans-serif; color: var(--white); text-transform: uppercase;
+    background: #0b0e0f url('assets/preshow/bg.jpg') 70% center / cover fixed no-repeat; }
+  .wrap { min-height: 100vh; min-height: 100dvh; max-width: 620px; margin: 0 auto; padding: 18px 18px calc(24px + env(safe-area-inset-bottom)); }
+  header { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; padding-bottom: 12px; border-bottom: 2px solid var(--green); }
+  header .h1 { font-stretch: 75%; font-weight: 900; font-size: 1.15rem; }
+  header .h2 { font-weight: 500; font-size: .95rem; color: var(--green); }
+  .k { font-weight: 500; font-size: .78rem; color: var(--green); letter-spacing: .05em; }
+  .view { display: none; } .view.on { display: block; }
+  h1 { font-stretch: 75%; font-weight: 900; font-size: 2.1rem; line-height: 1.02; margin: 26px 0 12px; }
+  p { font-weight: 300; font-size: 1.02rem; line-height: 1.4; color: var(--soft); margin: 0 0 16px; text-transform: none; }
+
+  /* pairing */
+  .code { font-stretch: 75%; font-weight: 900; font-size: 4.4rem; letter-spacing: .12em; line-height: 1; margin: 18px 0 14px; color: #fff; }
+  ol.steps { margin: 0; padding-left: 1.2em; font-weight: 400; font-size: 1rem; line-height: 1.5; color: var(--soft); text-transform: none; }
+  ol.steps b { color: #fff; font-weight: 500; }
+
+  /* dashboard */
+  .tiles { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 14px; }
+  .tile { padding: 12px 14px; background: rgba(255,255,255,.06); border: 1px solid var(--line); border-left: 4px solid var(--green); }
+  .tile .v { font-stretch: 75%; font-weight: 900; font-size: 2.3rem; line-height: 1; font-variant-numeric: tabular-nums; margin-top: 4px; }
+  .tile .s { font-weight: 300; font-size: .8rem; color: var(--soft); margin-top: 4px; text-transform: none; }
+  section { margin-top: 22px; }
+  .sh { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; padding-bottom: 8px; border-bottom: 1px solid var(--green); margin-bottom: 10px; }
+  .sh .r { font-weight: 300; font-size: .82rem; color: var(--soft); }
+  .q { font-stretch: 75%; font-weight: 900; font-size: 1.3rem; line-height: 1.1; margin: 4px 0 12px; }
+  .opt { position: relative; display: grid; grid-template-columns: 26px 1fr auto; align-items: center; gap: 6px; padding: 9px 12px; margin-bottom: 6px;
+    background: rgba(255,255,255,.05); border: 1px solid var(--line); font-size: 1rem; overflow: hidden; }
+  .opt .fill { position: absolute; inset: 0 auto 0 0; background: rgba(255,255,255,.10); width: 0; transition: width .4s; }
+  .opt > span { position: relative; }
+  .opt .l { font-stretch: 75%; font-weight: 900; color: var(--green); }
+  .opt .n { font-stretch: 75%; font-weight: 900; font-variant-numeric: tabular-nums; }
+  .opt.ok { border-color: var(--green); } .opt.ok .fill { background: rgba(0,176,80,.30); }
+  .opt.ok .t::after { content: '  ✓ right answer'; color: var(--green); font-weight: 500; font-size: .78rem; }
+  .said { font-weight: 300; font-size: 1rem; line-height: 1.35; color: var(--soft); text-transform: none; }
+  .row { display: grid; grid-template-columns: 34px 1fr auto; align-items: center; gap: 8px; padding: 10px 4px; border-bottom: 1px solid var(--line); cursor: pointer; }
+  .row .rk { font-stretch: 75%; font-weight: 900; color: var(--green); font-size: 1.1rem; }
+  .row .nm { font-weight: 500; font-size: 1.02rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .row .nm i { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: rgba(255,255,255,.22); margin-right: 8px; vertical-align: 2px; }
+  .row.on .nm i { background: var(--green); }
+  .row .sub { font-weight: 300; font-size: .76rem; color: var(--soft); text-transform: none; }
+  .row .sc { font-stretch: 75%; font-weight: 900; font-size: 1.2rem; font-variant-numeric: tabular-nums; text-align: right; }
+  .row .rm { display: none; grid-column: 1 / -1; margin-top: 6px; width: 100%; padding: 12px; border: 1px solid var(--red); background: rgba(255,138,122,.12); color: #fff;
+    font: 900 1rem 'Encode Sans SC', sans-serif; font-stretch: 75%; text-transform: uppercase; cursor: pointer; }
+  .row.open .rm { display: block; }
+  .row .rm.sure { background: var(--red); color: #1a0907; }
+  .empty { font-weight: 300; color: var(--soft); padding: 12px 4px; text-transform: none; }
+  .foot { margin-top: 20px; font-weight: 300; font-size: .78rem; color: var(--soft); text-transform: none; }
+  .stale { color: var(--red); }
+</style>
+</head>
+<body>
+  <div class="wrap">
+    <header><span class="h1">00. Pre-Show</span><span class="h2">Control room</span></header>
+
+    <div class="view" id="pair">
+      <h1>Pair this phone</h1>
+      <p>This page is the presenter's private view of the game. It works on one phone, after that phone is paired with the laptop.</p>
+      <div class="k">Your code</div>
+      <div class="code" id="code">······</div>
+      <ol class="steps">
+        <li>On the laptop, open the pre-show start screen.</li>
+        <li>Next to <b>ADMIN PHONE</b>, type this code and press <b>PAIR</b>.</li>
+        <li>This page changes by itself when it is done.</li>
+      </ol>
+      <div class="foot" id="pairNote"></div>
+    </div>
+
+    <div class="view" id="wait">
+      <h1>Paired</h1>
+      <p>This phone is the control room. The dashboard comes alive the moment the pre-show is launched on the laptop.</p>
+      <div class="k">Waiting for the launch…</div>
+    </div>
+
+    <div class="view" id="dash">
+      <div class="tiles">
+        <div class="tile"><div class="k">Players</div><div class="v" id="tPlayers">0</div><div class="s" id="tOnline">0 connected now</div></div>
+        <div class="tile"><div class="k" id="tClockK">Show starts in</div><div class="v" id="tClock">--:--</div><div class="s" id="tPhase"></div></div>
+        <div class="tile"><div class="k">Answered this card</div><div class="v" id="tAns">0</div><div class="s" id="tAnsS"></div></div>
+        <div class="tile"><div class="k">Right answers so far</div><div class="v" id="tAcc">–</div><div class="s" id="tAccS"></div></div>
+      </div>
+
+      <section>
+        <div class="sh"><span class="k" id="cNum">On screen now</span><span class="r" id="cState"></span></div>
+        <div class="q" id="cQ"></div>
+        <div id="cOpts"></div>
+      </section>
+
+      <section>
+        <div class="sh"><span class="k">Announcer, last line</span></div>
+        <div class="said" id="said">Nothing spoken yet.</div>
+      </section>
+
+      <section>
+        <div class="sh"><span class="k">Everyone, ranked</span><span class="r">tap a name to remove it</span></div>
+        <div id="rows"></div>
+        <div class="empty" id="none">Nobody has joined yet.</div>
+      </section>
+      <div class="foot" id="fresh"></div>
+    </div>
+  </div>
+
+  <script>
+  'use strict';
+  /* This phone's identity is a random token that never leaves it except in a request header. The server only ever
+     stores the token's SHA-256. Pairing, the dashboard and the remove button are described in api/preshow.js. */
+  const API = '/api/preshow/';
+  const KEY = 'preshow609.admin';
+  const $ = id => document.getElementById(id);
+  const pad = n => String(n).padStart(2, '0');
+  const LETTERS = ['A', 'B', 'C', 'D'];
+  const view = id => document.querySelectorAll('.view').forEach(v => v.classList.toggle('on', v.id === id));
+
+  let token = null;
+  try { token = localStorage.getItem(KEY); } catch (_) {}
+  if (!token || token.length < 32) {
+    token = [...crypto.getRandomValues(new Uint8Array(24))].map(b => b.toString(16).padStart(2, '0')).join('');
+    try { localStorage.setItem(KEY, token); } catch (_) { $('pairNote').textContent = 'This browser will not remember the pairing. Turn off private browsing and reload.'; }
+  }
+  const hashOf = async t => [...new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(t)))].map(b => b.toString(16).padStart(2, '0')).join('');
+
+  let d = null, offset = 0, lastOk = 0, openId = null, sureId = null, codeAsked = 0;
+
+  async function askCode(){
+    if (Date.now() - codeAsked < 20000) return; codeAsked = Date.now();
+    try {
+      const r = await fetch(API + 'pair', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ hash: await hashOf(token) }) });
+      const j = await r.json(); if (j.code) $('code').textContent = j.code;
+    } catch (_) {}
+  }
+
+  async function pull(){
+    const t0 = Date.now();
+    try {
+      const r = await fetch(API + 'admin', { cache: 'no-store', headers: { 'X-Admin-Token': token } });
+      if (!r.ok) throw new Error('admin ' + r.status);
+      const j = await r.json(), t1 = Date.now();
+      offset = j.now + (t1 - t0) / 2 - t1; lastOk = t1; d = j;
+      if (!j.show) { if (j.paired) view('wait'); else { view('pair'); askCode(); } return; }
+      view('dash'); draw();
+    } catch (_) { /* keep the last picture; the footer says how old it is */ }
+  }
+
+  function draw(){
+    $('tPlayers').textContent = d.players;
+    $('tOnline').textContent = d.online + ' connected now';
+    const answered = d.card.counts.reduce((a, b) => a + b, 0);
+    $('tAns').textContent = answered;
+    $('tAnsS').textContent = d.online ? Math.round(100 * answered / Math.max(1, d.online)) + '% of those connected' : '';
+    $('tAcc').textContent = d.answers ? Math.round(100 * d.correct / d.answers) + '%' : '–';
+    $('tAccS').textContent = d.answers ? d.correct + ' of ' + d.answers + ' answers' : 'no answers yet';
+    $('cNum').textContent = 'Question ' + pad(d.qi + 1) + ' of ' + pad(d.n);
+    $('cQ').textContent = d.card.q;
+    const box = $('cOpts'); box.textContent = '';
+    const most = Math.max(1, ...d.card.counts);
+    d.card.a.forEach((t, n) => {
+      const o = document.createElement('div'); o.className = 'opt' + (n === d.card.ok ? ' ok' : '');
+      const fill = document.createElement('div'); fill.className = 'fill'; fill.style.width = (100 * d.card.counts[n] / most) + '%';
+      const l = document.createElement('span'); l.className = 'l'; l.textContent = LETTERS[n];
+      const tx = document.createElement('span'); tx.className = 't'; tx.textContent = t;
+      const c = document.createElement('span'); c.className = 'n'; c.textContent = d.card.counts[n];
+      o.append(fill, l, tx, c); box.append(o);
+    });
+    $('said').textContent = d.voice || 'Nothing spoken yet.';
+    const rows = $('rows'); rows.textContent = '';
+    d.board.forEach((p, i) => {
+      const r = document.createElement('div'); r.className = 'row' + (p.online ? ' on' : '') + (p.id === openId ? ' open' : '');
+      const rk = document.createElement('span'); rk.className = 'rk'; rk.textContent = i + 1;
+      const mid = document.createElement('span');
+      const nm = document.createElement('div'); nm.className = 'nm'; nm.append(document.createElement('i'), p.name);
+      const sub = document.createElement('div'); sub.className = 'sub'; sub.textContent = p.correct + ' right of ' + p.answered + ' answered' + (p.online ? '' : ' · not connected');
+      mid.append(nm, sub);
+      const sc = document.createElement('span'); sc.className = 'sc'; sc.textContent = p.score.toLocaleString('en-US');
+      const rm = document.createElement('button'); rm.type = 'button'; rm.className = 'rm' + (p.id === sureId ? ' sure' : '');
+      rm.textContent = p.id === sureId ? 'Tap again to remove ' + p.name : 'Remove ' + p.name + ' from the game';
+      rm.addEventListener('click', e => { e.stopPropagation(); remove(p); });
+      r.addEventListener('click', () => { openId = openId === p.id ? null : p.id; sureId = null; draw(); });
+      r.append(rk, mid, sc, rm); rows.append(r);
+    });
+    $('none').hidden = d.board.length > 0;
+  }
+
+  async function remove(p){
+    if (sureId !== p.id) { sureId = p.id; draw(); return; }            // first tap asks, second tap does it
+    sureId = null; openId = null;
+    try { await fetch(API + 'kick', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Admin-Token': token }, body: JSON.stringify({ id: p.id }) }); } catch (_) {}
+    pull();
+  }
+
+  function tick(){
+    if (d && d.show) {
+      const now = Date.now() + offset, left = d.at - now, secs = Math.max(0, Math.ceil(left / 1000));
+      $('tClock').textContent = left > 0 ? pad(Math.floor(secs / 60)) + ':' + pad(secs % 60) : 'LIVE';
+      $('tClockK').textContent = left > 0 ? 'Show starts in' : 'Your deck is up';
+      const cycle = d.ask + d.answer, anchor = (d.at - d.final) % cycle, into = now - anchor - Math.floor((now - anchor) / cycle) * cycle;
+      const closed = now >= d.at - d.final;
+      const state = left <= 0 ? 'The pre-show has ended' : closed ? 'Closing countdown' : into < d.ask ? 'Open for answers, ' + Math.ceil((d.ask - into) / 1000) + ' s left' : 'Answer is showing';
+      $('tPhase').textContent = state; $('cState').textContent = state;
+    }
+    const age = lastOk ? Math.round((Date.now() - lastOk) / 1000) : null;
+    const f = $('fresh'); f.textContent = age === null ? '' : age <= 5 ? 'Live.' : 'No update for ' + age + ' seconds. Check the phone signal.'; f.classList.toggle('stale', age !== null && age > 5);
+  }
+
+  pull(); setInterval(pull, 2000); setInterval(tick, 250);
+  </script>
+</body>
+</html>

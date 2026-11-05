@@ -3,7 +3,8 @@
     { "source": "/api/blitz/:action", "destination": "/api/blitz?action=:action" },
     { "source": "/api/preshow/:action", "destination": "/api/preshow?action=:action" },
     { "source": "/visit", "destination": "/visit.html" },
-    { "source": "/609", "destination": "/join.html" }
+    { "source": "/609", "destination": "/join.html" },
+    { "source": "/admin", "destination": "/admin.html" }
   ],
   "headers": [
     {
