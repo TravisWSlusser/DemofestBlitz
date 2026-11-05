@@ -52,7 +52,7 @@ function Retry([scriptblock]$do, [int]$tries = 40) {           # PowerPoint answ
 Set-Content -Path $log -Value "Pre-show run $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')"
 
 # ---- the start screen. Two buttons, in the deck's own dress:
-#   AUDIO TEST       one short bleep through the speakers, to prove the laptop's sound is reaching the room.
+#   AUDIO TEST       one soft chime through the speakers, to prove the laptop's sound is reaching the room.
 #   LAUNCH PRE SHOW  closes this window and starts the pre-show. A "+10" show time starts counting from this press.
 # Esc closes the window without starting anything. Returns 'launch' or 'cancel'.
 function Show-StartScreen([string]$deckName, [string]$whenText, [object[]]$tracks) {
@@ -94,14 +94,18 @@ function Show-StartScreen([string]$deckName, [string]$whenText, [object[]]$track
   for ($i = 0; $i -lt $rows.Count; $i++) { [void](Lbl $rows[$i][0] (Fnt $plain 11) $green 52 (286 + $i * 30)); [void](Lbl $rows[$i][1] (Fnt $plain 11) $white 250 (286 + $i * 30)) }
   $bTest = Btn 'AUDIO TEST' 52 250 ([System.Drawing.Color]::FromArgb(24, 30, 32)) $white $white
   $bGo = Btn 'LAUNCH PRE SHOW' 318 340 $green $dark $green
-  $status = Lbl 'AUDIO TEST PLAYS ONE SHORT BLEEP THROUGH THE SPEAKERS.' (Fnt $plain 10) $soft 52 486
+  $status = Lbl 'AUDIO TEST PLAYS ONE SOFT CHIME THROUGH THE SPEAKERS.' (Fnt $plain 10) $soft 52 486
 
-  # the bleep: a 1 kHz tone, four tenths of a second, with soft edges so it does not click. It is built here in
-  # memory, so there is no file to find and nothing to download.
-  $rate = 44100; $n = [int]($rate * 0.4); $pcm = New-Object byte[] ($n * 2)
+  # the test sound: a soft two-note chime (G5, then C6), each note a bell-like sine with a touch of its octave that
+  # rings out and fades, about a second in all. It is built here in memory, so there is no file to find and nothing
+  # to download.
+  $rate = 22050; $n = [int]($rate * 1.15); $pcm = New-Object byte[] ($n * 2); $tau = 2 * [Math]::PI
   for ($i = 0; $i -lt $n; $i++) {
-    $edge = [Math]::Min(1.0, [Math]::Min($i, $n - 1 - $i) / ($rate * 0.012))
-    $v = [int]([Math]::Sin(2 * [Math]::PI * 1000 * $i / $rate) * 0.55 * $edge * 32767)
+    $t = $i / $rate
+    $x = [Math]::Min(1.0, $t / 0.008) * [Math]::Exp(-4.5 * $t) * ([Math]::Sin($tau * 783.99 * $t) + 0.22 * [Math]::Sin($tau * 1567.98 * $t))
+    $u = $t - 0.16
+    if ($u -gt 0) { $x += [Math]::Min(1.0, $u / 0.008) * [Math]::Exp(-4.5 * $u) * ([Math]::Sin($tau * 1046.5 * $u) + 0.22 * [Math]::Sin($tau * 2093.0 * $u)) }
+    $v = [int]($x * 0.26 * [Math]::Min(1.0, ($n - 1 - $i) / ($rate * 0.05)) * 32767)
     $pcm[2 * $i] = [byte]($v -band 0xFF); $pcm[2 * $i + 1] = [byte](($v -shr 8) -band 0xFF)
   }
   $wav = New-Object System.IO.MemoryStream; $bw = New-Object System.IO.BinaryWriter $wav; $ascii = [System.Text.Encoding]::ASCII
@@ -115,8 +119,8 @@ function Show-StartScreen([string]$deckName, [string]$whenText, [object[]]$track
     $s = $script:ss
     try {
       $s.wav.Position = 0; $s.player.Stream = $s.wav; $s.player.Play(); $s.count++
-      $s.status.Text = 'BLEEP ' + $s.count + ' SENT. IF YOU HEARD IT, THE SPEAKERS ARE CONNECTED. IF NOT, CHECK THE CABLE AND THE VOLUME.'
-    } catch { $s.status.Text = ('THE BLEEP COULD NOT PLAY: ' + $_.Exception.Message).ToUpper() }
+      $s.status.Text = 'TEST CHIME ' + $s.count + ' SENT. IF YOU HEARD IT, THE SPEAKERS ARE CONNECTED. IF NOT, CHECK THE CABLE AND THE VOLUME.'
+    } catch { $s.status.Text = ('THE TEST CHIME COULD NOT PLAY: ' + $_.Exception.Message).ToUpper() }
   })
   $bGo.Add_Click({ $script:ss.result = 'launch'; $script:ss.form.Close() })
   $esc.Add_Click({ $script:ss.form.Close() })
