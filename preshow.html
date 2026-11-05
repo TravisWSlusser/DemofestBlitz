@@ -51,7 +51,15 @@
   /* timer: a thin green line that runs out while the card is open */
   .bar { position: absolute; left: 3.9cqw; right: 31cqw; bottom: 9.6cqh; height: .22cqw; background: var(--line); }
   .bar i { display: block; height: 100%; width: 100%; background: var(--green); transform-origin: left center; }
-  .foot { position: absolute; left: 3.9cqw; bottom: 4.9cqh; font-weight: 500; font-size: 1.46cqw; color: var(--green); letter-spacing: .01em; white-space: nowrap; }
+  .foot { position: absolute; left: 3.9cqw; bottom: 4.9cqh; font-weight: 500; font-size: 1.46cqw; color: var(--green); letter-spacing: .01em; white-space: nowrap; transition: opacity .3s; }
+  /* captions: while the announcer speaks, the footer line gives way to what is being said, one phrase at a time */
+  .cap { position: absolute; left: 3.9cqw; right: 3.9cqw; bottom: 3.9cqh; display: flex; align-items: baseline; gap: 1.3cqw; opacity: 0; transform: translateY(.8cqh); transition: opacity .3s, transform .3s; }
+  .cap .who { font-weight: 500; font-size: 1.3cqw; color: var(--green); letter-spacing: .04em; white-space: nowrap; }
+  .cap .who::before { content: ''; display: inline-block; width: .7cqw; height: .7cqw; border-radius: 50%; background: var(--green); margin-right: .6cqw; animation: live 1s ease-in-out infinite alternate; }
+  @keyframes live { from { opacity: .35; } to { opacity: 1; } }
+  .cap .say { font-weight: 500; font-size: 2.3cqw; line-height: 1.1; white-space: nowrap; }
+  body.cap-on .cap { opacity: 1; transform: none; }
+  body.cap-on .foot { opacity: 0; }
 
   /* right column: how to join, then the live leaderboard */
   .side { position: absolute; right: 3.9cqw; top: 13.5cqh; width: 23.4cqw; }
@@ -117,6 +125,7 @@
         </div>
       </aside>
 
+      <div class="cap"><span class="who">Announcer</span><span class="say" id="capText"></span></div>
       <div class="foot">DevLearn 2026 &nbsp;│&nbsp; Session 609 &nbsp;│&nbsp; Travis Slusser, Senior Learning Strategist, GSE, Qlik</div>
     </div>
   </div>
@@ -175,6 +184,23 @@
   addEventListener('keydown', e => { if (e.key === 'm' || e.key === 'M') { sfxOn = !sfxOn; if (sfxOn) sfx.join(); } });
   addEventListener('pointerdown', () => audio(), { once: true });
 
+  /* Captions for the announcer. `state` hands over the line being spoken: when it starts (server time) and its phrases
+     with their timings. Each phrase is shown while it is being said. */
+  let cue = null, capShown = '';
+  function caption(now){
+    let text = '';
+    if (cue && cue.parts && cue.parts.length && now >= cue.at - 150 && now < cue.at + cue.ms + 500) {
+      const t = now - cue.at;
+      let part = cue.parts[0];
+      for (const p of cue.parts) { if (t >= p.t) part = p; }
+      text = part.text;
+    }
+    if (text === capShown) return;
+    capShown = text;
+    if (text) document.getElementById('capText').textContent = text;
+    document.body.classList.toggle('cap-on', !!text);
+  }
+
   function timeline(now){
     const cycle = T.ask + T.answer;
     const anchor = at ? (at - T.final) % cycle : 0;
@@ -192,6 +218,7 @@
       T = { ask: d.ask, answer: d.answer, final: d.final };
       if (d.cards) cards = d.cards;
       if (d.reveal) reveals[d.reveal.qi] = d.reveal;
+      if (d.cue) cue = d.cue;
       drawBoard(d.top || [], d.players || 0);
     } catch (_) { /* keep showing what we have; the next poll tries again */ }
   }
@@ -248,6 +275,7 @@
   function frame(){
     const now = srvNow();
     const tl = timeline(now);
+    caption(now);
     if (at) {
       const left = at - now, secs = Math.max(0, Math.ceil(left / 1000));
       $('clock').hidden = false;

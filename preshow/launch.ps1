@@ -190,7 +190,9 @@ public static class PreShowWin {
   # ---- the announcer: an ElevenLabs voice. The server writes each line from the live leaderboard and returns the audio;
   # this script only asks for it on a schedule and plays it, dipping the music underneath. Schedule, in server time:
   # a welcome just after the start, a standings update at an answer reveal roughly every two minutes (every fifth
-  # card), and the winner over the closing countdown. Each line is requested several seconds early because the
+  # card), and the winner over the closing countdown. Each request says when the line will start playing, so the
+  # server can put its captions on the big screen and the phones at that moment.
+  # (Schedule continued:) Each line is requested several seconds early because the
   # expressive voice model takes a moment; one that fails or arrives too late is simply skipped.
   $plan = New-Object System.Collections.ArrayList; $vp = $null
   $script:voiceOn = $false; $script:voiceStart = Get-Date; $script:duck = 1.0
@@ -220,7 +222,7 @@ public static class PreShowWin {
       if (-not $a.task -and $sn -ge $a.fetch -and $sn -lt $a.play.AddSeconds($a.late)) {
         $a.file = Join-Path $env:TEMP ("preshow-voice-$atMs-$($a.kind)-$($plan.IndexOf($a)).mp3")
         $a.wc = New-Object System.Net.WebClient
-        $a.task = $a.wc.DownloadFileTaskAsync([uri]"$site/api/preshow/announce?show=$atMs&kind=$($a.kind)", $a.file)
+        $a.task = $a.wc.DownloadFileTaskAsync([uri]"$site/api/preshow/announce?show=$atMs&kind=$($a.kind)&play=$(([DateTimeOffset]$a.play).ToUnixTimeMilliseconds())", $a.file)
       }
       if ($a.task -and -not $a.done -and $sn -ge $a.play) {
         if ($a.task.IsCompleted) {

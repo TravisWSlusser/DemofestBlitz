@@ -12,6 +12,7 @@
 //   GET  state?show=&cards=1   (header X-Player-Token optional)  timing, cards, leaderboard, reveal, my score
 //   POST join   { show, name }                                   → { token, name }
 //   POST answer { show, choice }   (header X-Player-Token)       → { ok, pick }
+//   GET  announce?show=&kind=&play=                           the announcer's next line as mp3; registers its captions
 //   GET  results  (header X-Admin-Key)                           CSV of every player in every show
 //   POST reset    (header X-Admin-Key)                           empties the two pre-show tables
 import { neon } from '@neondatabase/serverless';
@@ -67,6 +68,16 @@ function ensureTables() {
         audio       text NOT NULL,
         created_at  timestamptz NOT NULL DEFAULT now(),
         PRIMARY KEY (show, slot)
+      )`;
+      await sql`ALTER TABLE preshow_voice ADD COLUMN IF NOT EXISTS cues text`;
+      await sql`ALTER TABLE preshow_voice ADD COLUMN IF NOT EXISTS ms integer`;
+      // the line being spoken right now in each show: when it starts (server time) and its captions, phrase by phrase.
+      // The big screen and the phones read this through `state` and show the words in step with the voice.
+      await sql`CREATE TABLE IF NOT EXISTS preshow_live (
+        show        text PRIMARY KEY,
+        play_at     bigint NOT NULL,
+        ms          integer NOT NULL,
+        cues        text NOT NULL
       )`;
     })().catch(e => { ready = null; throw e; });
   }
@@ -130,6 +141,14 @@ const tallyOf = (show, qi) => cached('tally:' + show + ':' + qi, 1000, async () 
   return { answered: r[0].answered, right: r[0].correct };
 });
 
+const cueOf = show => cached('cue:' + show, 800, async () => {
+  const r = await sql`SELECT play_at, ms, cues FROM preshow_live WHERE show = ${show}`;
+  if (!r.length) return null;
+  const at = Number(r[0].play_at);
+  if (at + r[0].ms + 2000 < Date.now()) return null;                  // already spoken
+  try { return { at, ms: r[0].ms, parts: JSON.parse(r[0].cues) }; } catch { return null; }
+});
+
 // ── actions ─────────────────────────────────────────────────────────────────
 async function state(req, res) {
   await ensureTables();
@@ -157,6 +176,8 @@ async function state(req, res) {
       if (mine.length && t.reveal) { out.me.right = mine[0].correct; out.me.pts = mine[0].pts; }
     }
   }
+  const cue = await cueOf(show);
+  if (cue) out.cue = cue;                                              // captions for the announcer's current line
   out.now = Date.now();   // stamped last, so the caller's clock sync is not skewed by the queries above
   return res.status(200).json(out);
 }
@@ -225,6 +246,7 @@ async function reset(req, res) {
   await ensureTables();
   await sql`TRUNCATE preshow_answers, preshow_players RESTART IDENTITY`;
   await sql`TRUNCATE preshow_voice`;
+  await sql`TRUNCATE preshow_live`;
   cache.clear();
   return res.status(200).json({ ok: true });
 }
@@ -297,6 +319,72 @@ function composeLine(kind, top, players, s, newLeader) {
   return line + (s % 2 ? ' [upbeat] ' + players + ' of you are in the game.' : ' [inviting] Still time to scan the code and jump in.');
 }
 
+/* Captions: the spoken line cut into short phrases, each with the moment it starts (ms from the start of the audio)
+   and how long it stays up. A direction tag always starts a new phrase; long sentences are split evenly so every
+   phrase fits one line on the big screen. Timing comes from ElevenLabs' own character timestamps when they line up
+   with the text, otherwise it is estimated from the length of each phrase. */
+const CAPTION_MAX = 46;
+function captionParts(line, totalMs, alignment) {
+  const phrases = [];
+  for (const seg of line.split(/\s*\[[^\]]*\]\s*/)) {
+    const text = seg.replace(/\s+/g, ' ').trim();
+    if (!text) continue;
+    for (const raw of text.match(/[^.!?\u2026]+(?:[.!?\u2026]+|$)\s*/g) || [text]) {
+      const sentence = raw.trim();
+      if (!sentence) continue;
+      const limit = Math.min(CAPTION_MAX, Math.ceil(sentence.length / Math.ceil(sentence.length / CAPTION_MAX)) + 6);
+      let piece = '';
+      for (const word of sentence.split(' ')) {
+        if (piece && (piece + ' ' + word).length > limit) { phrases.push(piece); piece = word; }
+        else piece = piece ? piece + ' ' + word : word;
+      }
+      if (piece) phrases.push(piece);
+    }
+  }
+  if (!phrases.length) return { parts: [], exact: false };
+  let parts = null;
+  const ch = alignment && alignment.characters, st = alignment && alignment.character_start_times_seconds;
+  if (Array.isArray(ch) && Array.isArray(st) && ch.length === st.length) {
+    const joined = ch.join('');
+    if (joined.length === ch.length) {
+      const found = []; let cursor = 0;
+      for (const p of phrases) {
+        const i = joined.indexOf(p, cursor);
+        if (i < 0) break;
+        found.push({ t: Math.round(st[i] * 1000), text: p }); cursor = i + p.length;
+      }
+      if (found.length === phrases.length) parts = found;
+    }
+  }
+  const exact = !!parts;
+  if (!parts) {                                                        // estimate: time in proportion to length, plus a breath per phrase
+    const weight = p => p.length + 4, total = phrases.reduce((n, p) => n + weight(p), 0);
+    let acc = 0;
+    parts = phrases.map(p => { const t = Math.round(totalMs * acc / total); acc += weight(p); return { t, text: p }; });
+  }
+  parts[0].t = Math.min(parts[0].t, 400);
+  parts.forEach((p, i) => { p.d = Math.max(300, (i + 1 < parts.length ? parts[i + 1].t : totalMs) - p.t); });   // up until the next one starts
+  return { parts, exact };
+}
+
+/* One request to ElevenLabs for one model. First the variant that also says when each character is spoken (for
+   captions in step with the voice); if that variant is not offered for this model, the plain one. */
+async function speak(key, model, text) {
+  const base = 'https://api.elevenlabs.io/v1/text-to-speech/' + VOICE_ID;
+  const headers = { 'xi-api-key': key, 'Content-Type': 'application/json' };
+  const body = JSON.stringify({ text, model_id: model });
+  try {
+    const r = await fetch(base + '/with-timestamps?output_format=mp3_44100_128', { method: 'POST', headers, body, signal: AbortSignal.timeout(9000) });
+    if (r.ok) { const j = await r.json(); if (j && j.audio_base64) return { ok: true, b64: j.audio_base64, alignment: j.alignment || null }; }
+    else if (r.status === 401 || r.status === 429) return { ok: false, status: r.status, detail: (await r.text().catch(() => '')).slice(0, 400) };
+  } catch (_) { /* fall through to the plain request */ }
+  try {
+    const r = await fetch(base + '?output_format=mp3_44100_128', { method: 'POST', headers: { ...headers, Accept: 'audio/mpeg' }, body, signal: AbortSignal.timeout(12000) });
+    if (r.ok) return { ok: true, b64: Buffer.from(await r.arrayBuffer()).toString('base64'), alignment: null };
+    return { ok: false, status: r.status, detail: (await r.text().catch(() => '')).slice(0, 400) };   // ElevenLabs' own explanation; it never contains the key
+  } catch (_) { return { ok: false, status: 504, detail: model + ' did not answer in time' }; }
+}
+
 async function announce(req, res) {
   const key = process.env.ELEVENLABS_API_KEY;
   if (!key) return res.status(503).json({ error: 'The voice is not configured.' });
@@ -306,16 +394,28 @@ async function announce(req, res) {
   if (show === 'preview' || Number(show) < now - 60000 || Number(show) > now + 20 * 60000) return res.status(400).json({ error: 'That show is not live.' });
   const kind = ['welcome', 'mid', 'final'].includes(String(req.query.kind)) ? String(req.query.kind) : 'mid';
   const t = timeline(show, now);
+  // when the launcher will start playing this line (server time). With it, the captions go live for the screen and phones.
+  const play = Number(req.query.play);
+  const playAt = Number.isFinite(play) && play > now - 10000 && play < now + 120000 ? Math.round(play) : 0;
   // the welcome is the same for every show, so it is stored once for all of them; a changed text or voice makes a new row
   const rowShow = kind === 'welcome' ? '*' : show;
   const slot = kind === 'welcome' ? 'welcome:' + VOICE_ID + ':' + VOICE_MODELS[0] + ':' + WELCOME.length : kind === 'mid' ? 'mid:' + t.s : 'final';
-  const send = (line, b64) => {
+  const send = async (line, b64, cues, ms) => {
+    if (playAt) {
+      await sql`INSERT INTO preshow_live (show, play_at, ms, cues) VALUES (${show}, ${playAt}, ${ms}, ${cues})
+                ON CONFLICT (show) DO UPDATE SET play_at = EXCLUDED.play_at, ms = EXCLUDED.ms, cues = EXCLUDED.cues`;
+      cache.delete('cue:' + show);
+    }
     res.setHeader('Content-Type', 'audio/mpeg');
     res.setHeader('X-Voice-Text', encodeURIComponent(line));
     return res.status(200).send(Buffer.from(b64, 'base64'));
   };
-  const hit = await sql`SELECT line, audio FROM preshow_voice WHERE show = ${rowShow} AND slot = ${slot}`;
-  if (hit.length) return send(hit[0].line, hit[0].audio);
+  const hit = await sql`SELECT line, audio, cues, ms FROM preshow_voice WHERE show = ${rowShow} AND slot = ${slot}`;
+  if (hit.length) {
+    const ms = hit[0].ms || Math.round(Buffer.from(hit[0].audio, 'base64').length / 16);     // 128 kbps mp3: 16 bytes per millisecond
+    const cues = hit[0].cues || JSON.stringify(captionParts(hit[0].line, ms, null).parts);
+    return send(hit[0].line, hit[0].audio, cues, ms);
+  }
 
   const used = await sql`SELECT COUNT(*)::int AS n FROM preshow_voice WHERE created_at > now() - interval '24 hours'`;
   if (used[0].n >= VOICE_DAILY_CAP) return res.status(429).json({ error: 'The voice has reached its daily limit.' });
@@ -332,27 +432,22 @@ async function announce(req, res) {
     line = composeLine(kind, top, cnt[0].n, t.s, newLeader);
   }
 
-  let r = null, used_model = '', problem = { status: 504, detail: 'no answer' };
+  let got = null, usedModel = '', problem = { status: 504, detail: 'no answer' };
   for (const model of VOICE_MODELS) {
     const text = TAG_MODELS.test(model) ? line : line.replace(/\s*\[[^\]]*\]\s*/g, ' ').trim();
-    try {
-      const resp = await fetch('https://api.elevenlabs.io/v1/text-to-speech/' + VOICE_ID + '?output_format=mp3_44100_128', {
-        method: 'POST',
-        headers: { 'xi-api-key': key, 'Content-Type': 'application/json', Accept: 'audio/mpeg' },
-        body: JSON.stringify({ text, model_id: model }),
-        signal: AbortSignal.timeout(12000),
-      });
-      if (resp.ok) { r = resp; used_model = model; break; }
-      problem = { status: resp.status, detail: (await resp.text().catch(() => '')).slice(0, 400) };   // ElevenLabs' own explanation; it never contains the key
-      console.error('preshow voice', model, problem.status, problem.detail);
-      if (resp.status === 401 || resp.status === 429) break;             // a bad key or an exhausted quota will not improve with another model
-    } catch (e) { problem = { status: 504, detail: model + ' did not answer in time' }; console.error('preshow voice', model, 'timeout'); }
+    const r = await speak(key, model, text);
+    if (r.ok) { got = r; usedModel = model; break; }
+    problem = r; console.error('preshow voice', model, r.status, r.detail);
+    if (r.status === 401 || r.status === 429) break;                   // a bad key or an exhausted quota will not improve with another model
   }
-  if (!r) return res.status(502).json({ error: 'The voice service refused the request.', status: problem.status, detail: problem.detail });
-  res.setHeader('X-Voice-Model', used_model);
-  const b64 = Buffer.from(await r.arrayBuffer()).toString('base64');
-  await sql`INSERT INTO preshow_voice (show, slot, line, leader, audio) VALUES (${rowShow}, ${slot}, ${line}, ${leader}, ${b64}) ON CONFLICT (show, slot) DO NOTHING`;
-  return send(line, b64);
+  if (!got) return res.status(502).json({ error: 'The voice service refused the request.', status: problem.status, detail: problem.detail });
+  const ms = Math.round(Buffer.from(got.b64, 'base64').length / 16);
+  const cap = captionParts(line, ms, got.alignment);
+  const cues = JSON.stringify(cap.parts);
+  await sql`INSERT INTO preshow_voice (show, slot, line, leader, audio, cues, ms) VALUES (${rowShow}, ${slot}, ${line}, ${leader}, ${got.b64}, ${cues}, ${ms}) ON CONFLICT (show, slot) DO NOTHING`;
+  res.setHeader('X-Voice-Model', usedModel);
+  res.setHeader('X-Voice-Captions', cap.exact ? 'timed' : 'estimated');
+  return send(line, got.b64, cues, ms);
 }
 
 export const config = { maxDuration: 30 };

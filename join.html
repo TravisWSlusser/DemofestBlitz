@@ -58,6 +58,13 @@
   .status { min-height: 3.2em; margin-top: 14px; font-weight: 500; font-size: 1rem; color: var(--soft); }
   .status b { color: var(--green); font-stretch: 75%; font-weight: 900; font-size: 1.5rem; display: block; }
 
+  /* captions: what the announcer is saying, for anyone who cannot hear the room */
+  .capbox { margin-top: 14px; min-height: 4.6em; padding: 10px 14px; border-left: 4px solid var(--green); background: rgba(255,255,255,.07); opacity: 0; transition: opacity .3s; }
+  .capbox .who { font-weight: 500; font-size: .75rem; color: var(--green); letter-spacing: .06em; margin-bottom: 4px; }
+  .capbox .say { font-weight: 500; font-size: 1.15rem; line-height: 1.2; }
+  body.cap-on .capbox { opacity: 1; }
+  #join.on ~ .capbox, body:has(#join.on) .capbox { display: none; }
+
   /* done */
   #done { justify-content: center; }
   #done .big { font-stretch: 75%; font-weight: 900; font-size: 5.2rem; line-height: .9; margin: 6px 0 10px; }
@@ -66,6 +73,8 @@
 <body>
   <div class="wrap">
     <header><span class="h1">00. Pre-Show</span><span class="h2">Cinema Trivia</span></header>
+
+    <div class="capbox" aria-live="polite"><div class="who">Announcer</div><div class="say" id="capText"></div></div>
 
     <section class="view" id="join">
       <div class="k">DevLearn 2026 │ Session 609</div>
@@ -113,10 +122,28 @@
   let cards = [], reveals = {}, offset = 0, synced = false;
   let me = null;                       // { token, name }
   let stat = null;                     // my latest numbers from the server
+  let pulledSlot = null;
   let slot = null, pick = null, late = false, drawn = '', revealAsk = 0, revealDelay = 0, doneAsked = false;
   try { me = JSON.parse(localStorage.getItem(KEY) || 'null'); } catch (_) {}
   const srvNow = () => Date.now() + offset;
   const view = id => document.querySelectorAll('.view').forEach(v => v.classList.toggle('on', v.id === id));
+
+  /* Captions for the announcer. `state` hands over the line being spoken: when it starts (server time) and its phrases
+     with their timings. Each phrase is shown while it is being said. */
+  let cue = null, capShown = '';
+  function caption(now){
+    let text = '';
+    if (cue && cue.parts && cue.parts.length && now >= cue.at - 150 && now < cue.at + cue.ms + 500) {
+      const t = now - cue.at;
+      let part = cue.parts[0];
+      for (const p of cue.parts) { if (t >= p.t) part = p; }
+      text = part.text;
+    }
+    if (text === capShown) return;
+    capShown = text;
+    if (text) document.getElementById('capText').textContent = text;
+    document.body.classList.toggle('cap-on', !!text);
+  }
 
   function timeline(now){
     const cycle = T.ask + T.answer;
@@ -135,6 +162,7 @@
       T = { ask: d.ask, answer: d.answer, final: d.final };
       if (d.cards) cards = d.cards;
       if (d.reveal) reveals[d.reveal.qi] = d.reveal;
+      if (d.cue) cue = d.cue;
       if (me && d.me === null) { me = null; stat = null; try { localStorage.removeItem(KEY); } catch (_) {} }   // the board was cleared: join again
       if (d.me) { stat = d.me; stat.players = d.players; stat.qi = d.qi; if (d.me.pick !== null && d.qi === timeline(srvNow()).qi && pick === null) pick = d.me.pick; }
       return d;
@@ -199,6 +227,7 @@
   }
 
   function tick(){
+    caption(srvNow());
     if (!me) { view('join'); return; }
     if (!cards.length) return;
     const now = srvNow(), tl = timeline(now);
@@ -209,8 +238,9 @@
     view('play'); draw(false);
     $('bar').style.transform = 'scaleX(' + (tl.reveal ? 0 : 1 - tl.into / T.ask) + ')';
     // at the reveal, ask once for the answer and my points (each phone waits a random beat so they do not all hit at once)
-    const needs = tl.reveal && (!reveals[tl.qi] || (pick !== null && !late && !(stat && stat.qi === tl.qi && stat.pts !== undefined)));
-    if (needs && tl.into - T.ask > revealDelay && Date.now() - revealAsk > 1500) { revealAsk = Date.now(); pull().then(() => draw(true)); }
+    // (once per card in any case: the same call brings the announcer's captions)
+    const needs = tl.reveal && (pulledSlot !== tl.s || !reveals[tl.qi] || (pick !== null && !late && !(stat && stat.qi === tl.qi && stat.pts !== undefined)));
+    if (needs && tl.into - T.ask > revealDelay && Date.now() - revealAsk > 1500) { revealAsk = Date.now(); pulledSlot = tl.s; pull().then(() => draw(true)); }
   }
 
   function drawDone(){
