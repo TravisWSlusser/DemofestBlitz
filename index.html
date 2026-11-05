@@ -25,9 +25,11 @@
   .whobtn { position: absolute; right: 0; top: 6px; font-size: .72rem; letter-spacing: .14em; padding: 11px 16px; }
   .whobtn b { display: inline-block; margin-right: 8px; width: 1.5em; line-height: 1.5em; border: 1px solid currentColor; border-radius: 50%; text-align: center; font-weight: normal; }
   @media (max-width: 900px) { .whobtn { position: static; } }
-  .who { position: fixed; inset: 0; z-index: 30; display: flex; align-items: center; justify-content: center; padding: 24px; background: rgba(6,12,24,.84); }
+  .who { position: fixed; inset: 0; z-index: 30; display: flex; padding: 24px; overflow: auto; background: rgba(6,12,24,.84); }
   .who[hidden] { display: none; }
-  .who .card { position: relative; width: min(780px, 100%); max-height: 100%; overflow: auto; padding: 26px 34px 28px; background: #0b1528; text-align: left; animation: whoIn .22s ease both; }
+  /* (the card is centred by its margin, and it is the backdrop that scrolls on a small screen: the frame's corners
+     sit a pixel outside the card, so a card that scrolled would always show scrollbars) */
+  .who .card { position: relative; margin: auto; width: min(780px, 100%); padding: 26px 34px 28px; background: #0b1528; text-align: left; animation: whoIn .22s ease both; }
   @keyframes whoIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
   .who .qlogo { display: block; height: clamp(46px, 7.5vh, 76px); width: auto; margin: 0 0 16px; }
   .who h2 { font-family: 'VT323', monospace; font-weight: normal; font-size: clamp(30px, 4.4vh, 46px); line-height: 1; letter-spacing: .04em; color: #fff; margin: 10px 0 12px; text-shadow: 0 0 18px rgba(16,207,201,.35); }
