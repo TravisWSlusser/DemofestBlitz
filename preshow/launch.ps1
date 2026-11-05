@@ -190,7 +190,8 @@ public static class PreShowWin {
   # ---- the announcer: an ElevenLabs voice. The server writes each line from the live leaderboard and returns the audio;
   # this script only asks for it on a schedule and plays it, dipping the music underneath. Schedule, in server time:
   # a welcome just after the start, a standings update at an answer reveal roughly every two minutes (every fifth
-  # card), and the winner over the closing countdown. Any line that fails or is slow is simply skipped.
+  # card), and the winner over the closing countdown. Each line is requested several seconds early because the
+  # expressive voice model takes a moment; one that fails or arrives too late is simply skipped.
   $plan = New-Object System.Collections.ArrayList; $vp = $null
   $script:voiceOn = $false; $script:voiceStart = Get-Date; $script:duck = 1.0
   if (-not $NoVoice) {
@@ -199,13 +200,13 @@ public static class PreShowWin {
   }
   if ($vp) {
     $s0 = SNow; $CYC = $ASK + $ANS
-    if (($target - $s0).TotalSeconds -gt 70) { [void]$plan.Add(@{ kind = 'welcome'; fetch = $s0.AddSeconds(1); play = $s0.AddSeconds(5) }) }
+    if (($target - $s0).TotalSeconds -gt 70) { [void]$plan.Add(@{ kind = 'welcome'; fetch = $s0.AddSeconds(1); play = $s0.AddSeconds(5); late = 8 }) }
     for ($j = 2; $j -lt 200; $j += 5) {
       $rev = $target.AddSeconds(-($FIN + $ANS + $j * $CYC))        # the moment card j-from-the-end shows its answer
       if ($rev -lt $s0.AddSeconds(30)) { break }
-      [void]$plan.Add(@{ kind = 'mid'; fetch = $rev.AddSeconds(-4); play = $rev.AddSeconds(0.7) })
+      [void]$plan.Add(@{ kind = 'mid'; fetch = $rev.AddSeconds(-9); play = $rev.AddSeconds(0.7); late = 6 })
     }
-    [void]$plan.Add(@{ kind = 'final'; fetch = $target.AddSeconds(-($FIN + 3)); play = $target.AddSeconds(-$FIN + 0.8) })
+    [void]$plan.Add(@{ kind = 'final'; fetch = $target.AddSeconds(-($FIN + 7)); play = $target.AddSeconds(-$FIN + 0.8); late = 3 })
     Say "Announcer: $($plan.Count) lines planned."
   }
 
@@ -216,7 +217,7 @@ public static class PreShowWin {
     if (-not (KioskProcs)) { Say 'Kiosk closed by hand; revealing the deck now.'; break }
     $sn = SNow
     foreach ($a in $plan) {
-      if (-not $a.task -and $sn -ge $a.fetch -and $sn -lt $a.play.AddSeconds(4)) {
+      if (-not $a.task -and $sn -ge $a.fetch -and $sn -lt $a.play.AddSeconds($a.late)) {
         $a.file = Join-Path $env:TEMP ("preshow-voice-$atMs-$($a.kind)-$($plan.IndexOf($a)).mp3")
         $a.wc = New-Object System.Net.WebClient
         $a.task = $a.wc.DownloadFileTaskAsync([uri]"$site/api/preshow/announce?show=$atMs&kind=$($a.kind)", $a.file)
@@ -232,7 +233,7 @@ public static class PreShowWin {
             $why = 'no audio came back'; try { $why = $a.task.Exception.InnerException.Message } catch {}
             Say "Voice ($($a.kind)) skipped: $why"
           }
-        } elseif ($sn -gt $a.play.AddSeconds(4)) { $a.done = $true; try { $a.wc.CancelAsync() } catch {}; Say "Voice ($($a.kind)) skipped: too slow." }
+        } elseif ($sn -gt $a.play.AddSeconds($a.late)) { $a.done = $true; try { $a.wc.CancelAsync() } catch {}; Say "Voice ($($a.kind)) skipped: too slow." }
       }
     }
     if ($script:voiceOn) {

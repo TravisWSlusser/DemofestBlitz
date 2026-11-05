@@ -235,9 +235,13 @@ async function reset(req, res) {
 // always composed HERE from the live leaderboard; a caller cannot supply text, so this cannot be used as a free
 // text-to-speech service. The API key lives only in the ELEVENLABS_API_KEY environment variable.
 const VOICE_ID = process.env.ELEVENLABS_VOICE || 'QTGiyJvep6bcx4WD1qAq';
-const VOICE_MODEL = process.env.ELEVENLABS_MODEL || 'eleven_turbo_v2_5';
+// Eleven v4 is the expressive model: it follows short directions written in square brackets ("audio tags") and reads
+// punctuation, ellipses and capitals as delivery cues. If the account cannot use it, the next model in the list is
+// tried. Models before v3 would read the bracketed directions aloud, so the directions are stripped for them.
+const VOICE_MODELS = [process.env.ELEVENLABS_MODEL || 'eleven_v4', 'eleven_v4_turbo', 'eleven_v3', 'eleven_flash_v2_5'].filter((m, i, a) => a.indexOf(m) === i);
+const TAG_MODELS = /^eleven_v[34]/;
 const VOICE_DAILY_CAP = 60;          // generated lines per 24 hours, whatever happens
-const WELCOME = 'Welcome to session six oh nine. While you wait, grab your phone, scan the code on the screen, and add your name. Right answers score. Fast answers score more.';
+const WELCOME = "[warm, upbeat game show host] Hey, hey... welcome to session six oh nine! [playful] While you're getting settled, grab your phone, scan that code on the screen, and put your name on the board. Right answers score... FAST answers score more. [chuckles] No pressure.";
 
 /* A name is read aloud to the room, so it gets a second, stricter look than the one for the screen: first name only
    (which defuses most two-word joke names), and nothing from the list of names that are only rude when spoken. */
@@ -255,36 +259,42 @@ function spoken(name) {
   return first[0].toUpperCase() + first.slice(1).toLowerCase();   // "AVA" would be spelled out letter by letter
 }
 
-/* The words for a standings update or the closing call. Short on purpose: a line has to fit inside one answer reveal. */
+/* The words for a standings update or the closing call, written the way a game-show host would say them, with a
+   direction in square brackets ahead of each change of tone. Kept short: a line should not run far past one answer
+   reveal. `s` (the card number) picks between phrasings so consecutive updates do not sound identical. */
 function composeLine(kind, top, players, s, newLeader) {
   const nm = (p, fallback) => (p && spoken(p.name)) || fallback;
+  const pick = (...opts) => opts[((s % opts.length) + opts.length) % opts.length];
   const [a, b, c] = top;
   const A = nm(a, 'our leader'), B = nm(b, 'second place'), C = nm(c, 'third place');
+  const close = " [calm, friendly] Phones on silent, please... the show starts now.";
   if (kind === 'final') {
-    if (!a || a.score === 0) return 'That is the pre-show. Phones on silent, please. The show starts now.';
-    let line = 'That is the game. ' + (A === 'our leader' ? 'Our winner finishes' : A + ' wins it') + ' with ' + a.score + ' points.';
+    if (!a || a.score === 0) return "[warm] And that's the pre-show." + close;
+    let line = "[big finish, excited] And THAT is the game! " + (A === 'our leader' ? 'Our winner finishes' : A + ' wins it') + ' with ' + a.score + ' points!';
     const b2 = b && b.score > 0, c2 = c && c.score > 0;               // a placing is only called for someone who scored
-    if (b2 && c2) line += ' ' + (B === 'second place' ? 'Second place' : B) + ' takes second, and ' + (C === 'third place' ? 'third place rounds it out' : C + ' third') + '.';
-    else if (b2) line += ' ' + (B === 'second place' ? 'Well played to second place' : B + ' takes second') + '.';
-    return line + ' Phones on silent, please. The show starts now.';
+    if (b2 && c2) line += ' [warm] ' + (B === 'second place' ? 'Second place' : B) + ' takes second, and ' + (C === 'third place' ? 'third place rounds it out' : C + ' third') + '.';
+    else if (b2) line += ' [warm] ' + (B === 'second place' ? 'Well played, second place' : B + ' takes second') + '.';
+    return line + close;
   }
-  if (!a) return 'Nobody is on the board yet. Scan the code on the screen and be the first name up there.';
-  if (a.score === 0) return players + (players === 1 ? ' player is' : ' players are') + ' in, and nobody has scored yet. The next right answer takes the lead.';
-  if (!b) return A + ' is all alone on the board with ' + a.score + ' points. Somebody scan that code and bring some competition.';
+  if (!a) return "[playful] The board is empty... which means the first name up there is WINNING. [inviting] Scan the code and take it.";
+  if (a.score === 0) return '[amused] ' + players + (players === 1 ? ' player is' : ' players are') + " in, and nobody has scored yet. [teasing] The next right answer takes the lead.";
+  if (!b) return '[amused] ' + A + ' is all alone on the board with ' + a.score + " points. [inviting] Somebody scan that code and give them a game.";
   let line;
-  if (a.score === b.score) line = A + ' and ' + B + ' are tied at the top with ' + a.score + ' points.';
+  if (a.score === b.score) line = "[excited] It's a TIE at the top! " + A + ' and ' + B + ', both on ' + a.score + ' points.';
   else {
-    line = newLeader ? 'We have a new leader. ' + A + ' takes the top spot with ' + a.score + ' points.'
-      : (s % 2 ? A + ' leads with ' + a.score + ' points.' : A + ' is still out in front with ' + a.score + ' points.');
-    if (b.score === 0) line += ' Nobody else has scored yet.';
+    line = newLeader ? '[excited] Ooh... we have a NEW leader! ' + A + ' jumps to the top with ' + a.score + ' points.'
+      : pick('[excited] ' + A + ' is out in front with ' + a.score + ' points!',
+             '[impressed] Still ' + A + ' at the top... ' + a.score + ' points and counting.',
+             '[playful] Nobody has caught ' + A + ' yet. ' + a.score + ' points.');
+    if (b.score === 0) line += ' [teasing] And nobody else has scored. Come on, people.';
     else {
       const gap = a.score - b.score;
-      line += gap <= 80 ? ' ' + B + ' is only ' + gap + ' behind' : ' ' + B + ' is in second';
-      line += c && c.score > 0 ? ', and ' + C + ' holds third.' : '.';
+      line += gap <= 80 ? ' [teasing] But ' + B + ' is only ' + gap + ' points back' : ' [casual] ' + B + ' is sitting in second';
+      line += c && c.score > 0 ? ', and ' + C + ' is holding third.' : '.';
     }
   }
-  // one short tail, alternating between updates, so the whole line stays close to the length of an answer reveal
-  return line + (s % 2 ? ' ' + players + ' players are in.' : ' There is still time to scan the code.');
+  // one short tail, alternating between updates
+  return line + (s % 2 ? ' [upbeat] ' + players + ' of you are in the game.' : ' [inviting] Still time to scan the code and jump in.');
 }
 
 async function announce(req, res) {
@@ -298,7 +308,7 @@ async function announce(req, res) {
   const t = timeline(show, now);
   // the welcome is the same for every show, so it is stored once for all of them; a changed text or voice makes a new row
   const rowShow = kind === 'welcome' ? '*' : show;
-  const slot = kind === 'welcome' ? 'welcome:' + VOICE_ID + ':' + VOICE_MODEL + ':' + WELCOME.length : kind === 'mid' ? 'mid:' + t.s : 'final';
+  const slot = kind === 'welcome' ? 'welcome:' + VOICE_ID + ':' + VOICE_MODELS[0] + ':' + WELCOME.length : kind === 'mid' ? 'mid:' + t.s : 'final';
   const send = (line, b64) => {
     res.setHeader('Content-Type', 'audio/mpeg');
     res.setHeader('X-Voice-Text', encodeURIComponent(line));
@@ -322,20 +332,24 @@ async function announce(req, res) {
     line = composeLine(kind, top, cnt[0].n, t.s, newLeader);
   }
 
-  let r;
-  try {
-    r = await fetch('https://api.elevenlabs.io/v1/text-to-speech/' + VOICE_ID + '?output_format=mp3_44100_128', {
-      method: 'POST',
-      headers: { 'xi-api-key': key, 'Content-Type': 'application/json', Accept: 'audio/mpeg' },
-      body: JSON.stringify({ text: line, model_id: VOICE_MODEL }),
-      signal: AbortSignal.timeout(9000),
-    });
-  } catch (e) { return res.status(504).json({ error: 'The voice service did not answer in time.' }); }
-  if (!r.ok) {
-    const detail = (await r.text().catch(() => '')).slice(0, 400);     // ElevenLabs' own explanation; it never contains the key
-    console.error('preshow voice', r.status, detail);
-    return res.status(502).json({ error: 'The voice service refused the request.', status: r.status, detail });
+  let r = null, used_model = '', problem = { status: 504, detail: 'no answer' };
+  for (const model of VOICE_MODELS) {
+    const text = TAG_MODELS.test(model) ? line : line.replace(/\s*\[[^\]]*\]\s*/g, ' ').trim();
+    try {
+      const resp = await fetch('https://api.elevenlabs.io/v1/text-to-speech/' + VOICE_ID + '?output_format=mp3_44100_128', {
+        method: 'POST',
+        headers: { 'xi-api-key': key, 'Content-Type': 'application/json', Accept: 'audio/mpeg' },
+        body: JSON.stringify({ text, model_id: model }),
+        signal: AbortSignal.timeout(12000),
+      });
+      if (resp.ok) { r = resp; used_model = model; break; }
+      problem = { status: resp.status, detail: (await resp.text().catch(() => '')).slice(0, 400) };   // ElevenLabs' own explanation; it never contains the key
+      console.error('preshow voice', model, problem.status, problem.detail);
+      if (resp.status === 401 || resp.status === 429) break;             // a bad key or an exhausted quota will not improve with another model
+    } catch (e) { problem = { status: 504, detail: model + ' did not answer in time' }; console.error('preshow voice', model, 'timeout'); }
   }
+  if (!r) return res.status(502).json({ error: 'The voice service refused the request.', status: problem.status, detail: problem.detail });
+  res.setHeader('X-Voice-Model', used_model);
   const b64 = Buffer.from(await r.arrayBuffer()).toString('base64');
   await sql`INSERT INTO preshow_voice (show, slot, line, leader, audio) VALUES (${rowShow}, ${slot}, ${line}, ${leader}, ${b64}) ON CONFLICT (show, slot) DO NOTHING`;
   return send(line, b64);
