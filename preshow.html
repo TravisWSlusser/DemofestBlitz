@@ -48,7 +48,7 @@
 
   /* spin: the wheel picks the round's subject, then a second, smaller spinner picks its difficulty and what it is worth */
   body[data-ph="spin"] .spin { display: block; }
-  .spin { position: absolute; left: 3.9cqw; top: 18cqh; bottom: 14cqh; width: 66cqw; }
+  .spin { position: absolute; left: 3.9cqw; top: 18cqh; bottom: 14cqh; width: 67.5cqw; }
   .wheelbox { position: absolute; left: 0; top: 50%; transform: translateY(-50%); height: 100%; aspect-ratio: 1; }
   .wheel { width: 100%; height: 100%; display: block; transform-origin: 50% 50%; will-change: transform; }
   .wheel path { stroke: rgba(0,176,80,.55); stroke-width: .5; transition: fill .3s; }
@@ -62,11 +62,11 @@
   .result .cat { font-stretch: 75%; font-weight: 900; font-size: 3.8cqw; line-height: 1; margin: 1.2cqh 0 0; text-wrap: balance; display: none; }
   /* the difficulty spinner sits under the subject: a small wheel, its pointer, and what it landed on. The row keeps
      its place while hidden, so nothing moves when it appears. */
-  .worthrow { display: flex; align-items: center; gap: 2.6cqw; margin-top: 3cqh; visibility: hidden; }
-  .dialbox { position: relative; flex: none; width: 10cqw; aspect-ratio: 1; }
+  .worthrow { display: flex; align-items: center; gap: 2.5cqw; margin-top: 3cqh; visibility: hidden; }
+  .dialbox { position: relative; flex: none; width: 12cqw; aspect-ratio: 1; }
   .dialbox .pointer { right: -1.3cqw; border-width: .7cqw 1.7cqw .7cqw 0; }
   .worth { visibility: hidden; }
-  .worth .pts { font-stretch: 75%; font-weight: 900; font-size: 4.8cqw; line-height: .9; color: var(--green); white-space: nowrap; display: block; font-variant-numeric: tabular-nums; }
+  .worth .pts { font-stretch: 75%; font-weight: 900; font-size: 4.6cqw; line-height: .9; color: var(--green); white-space: nowrap; display: block; font-variant-numeric: tabular-nums; }
   .worth .unit { font-weight: 500; font-size: 1.46cqw; color: var(--green); letter-spacing: .04em; display: block; margin-top: .5cqh; }
   .worth .tier { font-weight: 300; font-size: 1.9cqw; color: var(--soft); white-space: nowrap; display: block; margin-top: .6cqh; }
   .spin.landed .wait { display: none; }
