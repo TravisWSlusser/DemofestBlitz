@@ -1,9 +1,9 @@
 // /api/preshow.js — the Session 609 pre-show game. vercel.json rewrites /api/preshow/<action> here.
 //
-// The big screen spins a wheel, then shows one trivia card at a time; phones join with a name and tap an answer; the
-// screen shows a live leaderboard. Everything runs off the SERVER clock:
-//   - each card is one cycle: the wheel spins to its category and points (SPIN_MS), the question is open (ASK_MS),
-//     the answer shows (ANSWER_MS). Harder cards are worth more;
+// The big screen spins a wheel for the subject and a second spinner for the difficulty, then shows one trivia card;
+// phones join with a name and tap an answer; the screen shows a live leaderboard. Everything runs off the SERVER clock:
+//   - each card is one cycle: the two spins land on its category and its points (SPIN_MS), the question is open
+//     (ASK_MS), the answer shows (ANSWER_MS). Harder cards are worth more;
 //   - which card is up at any moment is a pure function of the time, the show id and how many cards the show has, so
 //     the screen, every phone and this function agree without anyone "driving" the show;
 //   - the show id is the show's start time in epoch ms (the launcher's ?at=). Each run therefore gets its own empty
@@ -31,7 +31,7 @@ const CONN = process.env.DATABASE_URL
   || process.env.POSTGRES_URL;
 const sql = CONN ? neon(CONN) : null;
 
-const SPIN_MS = 6000;       // the wheel spins and lands on the card's category and points (0 = no wheel)
+const SPIN_MS = 8000;       // the wheel lands on the card's category, then the second spinner on its difficulty (0 = no spins)
 const ASK_MS = 17000;       // the card is open for answers
 const ANSWER_MS = 8000;     // then its answer is on screen
 const CYCLE = SPIN_MS + ASK_MS + ANSWER_MS;
@@ -111,8 +111,8 @@ const csvCell = v => { const s = v == null ? '' : String(v); return /[",\n\r]/.t
    A real show brings its own cards: the launcher sends them when it claims the show (see `claim`), and they are kept
    with the claim. Anything else plays the built-in sample. Cards are checked once on the way in, so the rest of this
    file can trust their shape. */
-const POINTS = [0, 100, 200, 300];                    // by difficulty: the deeper the cut, the more it is worth
-const TIERS = ['', 'Warm-up', 'Fan favourite', 'Deep cut'];
+const POINTS = [0, 100, 300, 500];                    // by difficulty: the harder the question, the more it is worth
+const TIERS = ['', 'Easy', 'Medium', 'Hard'];
 const text = (v, max) => (typeof v === 'string' && v.trim() ? v.trim().slice(0, max) : '');
 function cleanCards(list) {
   if (!Array.isArray(list) || list.length < 1 || list.length > 60) return null;
@@ -143,7 +143,7 @@ async function cardsOf(show) {
 /* What the screen and the phones are given: everything except the right answer and its fact. */
 const publicCards = cards => cards.map(c => ({ q: c.q, a: c.a, cat: c.cat, short: c.short, d: c.d, pts: POINTS[c.d], tier: TIERS[c.d], line: c.line }));
 
-/* Where the show is at `now`, for a show with n cards. Each card is one cycle: the wheel spins (SPIN_MS), the question
+/* Where the show is at `now`, for a show with n cards. Each card is one cycle: the two spins (SPIN_MS), the question
    is open (ASK_MS), the answer shows (ANSWER_MS). The cards run in order and the last one ends exactly when the
    closing countdown begins, so card 1 starts n cycles before that; any time before it is the intro, when people join.
    The endless preview has no end to count back from, so it simply loops on the clock.
@@ -212,7 +212,7 @@ async function state(req, res) {
   const cards = await cardsOf(show);
   const t = timeline(show, Date.now(), cards.length);
   const out = { spin: SPIN_MS, ask: ASK_MS, answer: ANSWER_MS, final: FINAL_MS, n: cards.length, qi: t.idx, phase: t.phase, closed: t.closed };
-  if (req.query.cards) out.cards = publicCards(cards);
+  if (req.query.cards) { out.cards = publicCards(cards); out.levels = [1, 2, 3].map(d => ({ d, pts: POINTS[d], tier: TIERS[d] })); }   // levels: the wedges of the difficulty spinner
   const board = await boardOf(show);
   out.top = board.top; out.players = board.players;
   if (t.reveal) {

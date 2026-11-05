@@ -2,7 +2,7 @@
    show started from a plain test link. A real pre-show gets its questions from the launcher on the presenter's
    laptop at launch (see `claim` in preshow.js), so the real questions and answers are never in this public repo.
    Each card: q, a (exactly four answers), ok (index of the right one, 0-3), fact (one line shown with the answer),
-   cat / short (category name, and its label on the wheel), d (difficulty 1-3: 100, 200 or 300 points). */
+   cat / short (category name, and its label on the wheel), d (difficulty 1-3: easy, medium or hard). */
 export const SAMPLE_CARDS = [
   { q: 'Which 1927 film is credited as the first feature-length "talkie"?',
     a: ['Metropolis', 'The Jazz Singer', 'Wings', 'Sunrise'], ok: 1, cat: 'Film History', short: 'FILM HISTORY', d: 2,

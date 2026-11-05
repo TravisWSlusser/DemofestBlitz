@@ -46,7 +46,7 @@
   .intro .go { font-weight: 300; font-size: 1.9cqw; color: var(--soft); }
   .intro .go b { font-stretch: 75%; font-weight: 900; color: #fff; font-size: 2.6cqw; font-variant-numeric: tabular-nums; margin-left: .8cqw; }
 
-  /* spin: the wheel picks the round's category, then shows what it is worth */
+  /* spin: the wheel picks the round's subject, then a second, smaller spinner picks its difficulty and what it is worth */
   body[data-ph="spin"] .spin { display: block; }
   .spin { position: absolute; left: 3.9cqw; top: 18cqh; bottom: 14cqh; width: 66cqw; }
   .wheelbox { position: absolute; left: 0; top: 50%; transform: translateY(-50%); height: 100%; aspect-ratio: 1; }
@@ -59,13 +59,20 @@
   .result { position: absolute; left: calc(68cqh + 6cqw); right: 0; top: 50%; transform: translateY(-50%); }   /* the wheel is 68cqh across */
   .result .k { font-weight: 500; font-size: 1.46cqw; color: var(--green); letter-spacing: .04em; }
   .result .wait { font-weight: 300; font-size: 2.2cqw; color: var(--soft); margin-top: 1.2cqh; }
-  .result .cat { font-stretch: 75%; font-weight: 900; font-size: 4.4cqw; line-height: 1; margin: 1.2cqh 0 2cqh; text-wrap: balance; display: none; }
-  .result .worth { display: none; }
-  .result .pts { font-stretch: 75%; font-weight: 900; font-size: 3.4cqw; line-height: 1; color: var(--green); white-space: nowrap; display: block; }
-  .result .tier { font-weight: 300; font-size: 1.9cqw; color: var(--soft); white-space: nowrap; display: block; margin-top: .8cqh; }
+  .result .cat { font-stretch: 75%; font-weight: 900; font-size: 3.8cqw; line-height: 1; margin: 1.2cqh 0 0; text-wrap: balance; display: none; }
+  /* the difficulty spinner sits under the subject: a small wheel, its pointer, and what it landed on. The row keeps
+     its place while hidden, so nothing moves when it appears. */
+  .worthrow { display: flex; align-items: center; gap: 2.6cqw; margin-top: 3cqh; visibility: hidden; }
+  .dialbox { position: relative; flex: none; width: 10cqw; aspect-ratio: 1; }
+  .dialbox .pointer { right: -1.3cqw; border-width: .7cqw 1.7cqw .7cqw 0; }
+  .worth { visibility: hidden; }
+  .worth .pts { font-stretch: 75%; font-weight: 900; font-size: 4.8cqw; line-height: .9; color: var(--green); white-space: nowrap; display: block; font-variant-numeric: tabular-nums; }
+  .worth .unit { font-weight: 500; font-size: 1.46cqw; color: var(--green); letter-spacing: .04em; display: block; margin-top: .5cqh; }
+  .worth .tier { font-weight: 300; font-size: 1.9cqw; color: var(--soft); white-space: nowrap; display: block; margin-top: .6cqh; }
   .spin.landed .wait { display: none; }
   .spin.landed .cat { display: block; animation: rise .45s ease both; }
-  .spin.landed .worth { display: block; animation: rise .45s .12s ease both; }
+  .spin.landed .worthrow { visibility: visible; animation: rise .45s .1s ease both; }
+  .spin.worthy .worth { visibility: visible; animation: rise .4s ease both; }
 
   /* the card: bottom-left, like the title slide */
   body[data-ph="ask"] .card, body[data-ph="answer"] .card { display: block; }
@@ -154,7 +161,7 @@
           <ol>
             <li><b>1</b>Scan the code with your phone</li>
             <li><b>2</b>Add your name</li>
-            <li><b>3</b>Answer fast. Deep cuts score more</li>
+            <li><b>3</b>Answer fast. Hard rounds score more</li>
           </ol>
           <div class="go" id="introGo">First spin in<b id="introLeft">0:00</b></div>
         </div>
@@ -166,7 +173,10 @@
           <div class="k" id="spinNum"></div>
           <div class="wait">Spinning…</div>
           <div class="cat" id="spinCat"></div>
-          <div class="worth"><span class="pts" id="spinPts"></span><span class="tier" id="spinTier"></span></div>
+          <div class="worthrow">
+            <div class="dialbox"><svg class="wheel" id="dial" viewBox="-102 -102 204 204" aria-hidden="true"></svg><div class="pointer"></div></div>
+            <div class="worth"><span class="pts" id="spinPts"></span><span class="unit">Points</span><span class="tier" id="spinTier"></span></div>
+          </div>
         </div>
       </div>
 
@@ -188,7 +198,7 @@
       <aside class="side">
         <div class="joinbox">
           <div class="qr" id="qr"></div>
-          <div><div class="j1">Play along</div><div class="j2">Scan with your phone.<br>Add your name.<br><b>Fast and right wins.</b></div></div>
+          <div><div class="j1">Play along</div><div class="j2">Scan with your phone.<br>Add your name.<br><b>Not too late: the big points come last.</b></div></div>
         </div>
         <div class="board">
           <div class="bh"><span class="b1" id="btitle">Leaderboard</span><span class="b2" id="count"></span></div>
@@ -220,7 +230,8 @@
   const pad = n => String(n).padStart(2, '0');
   const LETTERS = ['A', 'B', 'C', 'D'];
 
-  let T = { spin: 6000, ask: 17000, answer: 8000, final: 20000 };
+  let T = { spin: 8000, ask: 17000, answer: 8000, final: 20000 };
+  let levels = [{ d: 1, pts: 100, tier: 'Easy' }, { d: 2, pts: 300, tier: 'Medium' }, { d: 3, pts: 500, tier: 'Hard' }];
   let cards = [], reveals = {}, offset = 0, synced = false, shown = '', boardKey = '', lastAsk = 0, scores = {};
   let lastPlayers = -1, lastJoinSfx = 0, lastTick = '';
   const srvNow = () => Date.now() + offset;
@@ -249,8 +260,9 @@
   }
   const sfx = {
     // the wheel: clicks that start fast and slow down, ending as it stops (secs = how long it turns)
-    spin(secs){ if (!audio()) return; let t = 0, gap = .055; while (t < secs - .05) { tone(980, t, .035, 'triangle', .22); gap *= 1.11; t += gap; } },
+    spin(secs, freq){ if (!audio()) return; let t = 0, gap = .055; while (t < secs - .05) { tone(freq || 980, t, .035, 'triangle', .22); gap *= 1.11; t += gap; } },
     land(){ if (audio()) { tone(392, 0, .22, 'triangle', .7); tone(587.33, .11, .34, 'triangle', .8); } },             // the wheel stops on a category
+    worth(d){ if (audio()) [523.25, 659.25, 783.99].slice(0, d).forEach((f, i) => tone(f, i * .1, i === d - 1 ? .42 : .2, 'triangle', .75)); },   // the second spinner stops: one note for easy, three for hard
     tick(){ if (audio()) tone(1320, 0, .06, 'sine', .35); },                                                             // the last seconds of a card
     reveal(){ if (audio()) [523.25, 659.25, 783.99, 1046.5].forEach((f, i) => tone(f, i * .085, .5, 'sine', .7)); },     // the answer
     join(){ if (audio()) tone(880, 0, .12, 'sine', .4, 1174.66); },                                                      // a new name on the board
@@ -303,6 +315,7 @@
       const d = await r.json(), t1 = Date.now(), rtt = t1 - t0;
       if (!synced || rtt < 600) { offset = d.now + rtt / 2 - t1; synced = true; }   // a slow round trip is a poor clock sample
       T = { spin: d.spin, ask: d.ask, answer: d.answer, final: d.final };
+      if (d.levels && d.levels.length) levels = d.levels;
       if (d.cards) { cards = d.cards; buildWheel(); }
       if (d.reveal) reveals[d.reveal.qi] = d.reveal;
       if (d.cue) cue = d.cue;
@@ -329,16 +342,17 @@
     $('count').textContent = players ? players + (players === 1 ? ' player' : ' players') : '';
   }
 
-  /* ---- the wheel. One wedge per category in this show's cards. The pointer sits at three o'clock. Where the wheel
-          stops is not chance: each round's category is already fixed by the show, and the wheel is turned to it. ---- */
+  /* ---- the two spins. The wheel has one wedge per category in this show's cards; the small spinner beside it has
+          the three difficulties, twice round. Both pointers sit at three o'clock. Where they stop is not decided here:
+          each round's subject and difficulty were drawn when the show's running order was dealt, and the wheels are
+          turned to them. WHEEL_END, DIAL_START and DIAL_END are shares of the spin phase (join.html uses the same). ---- */
   const SVGNS = 'http://www.w3.org/2000/svg';
-  let wedges = [], rot = 0, spunFor = null, landedFor = null;
-  function buildWheel(){
-    wedges = [];
-    cards.forEach(c => { if (!wedges.includes(c.short)) wedges.push(c.short); });
-    const svg = $('wheel'); svg.textContent = '';
-    const n = wedges.length, seg = 360 / n, rad = d => d * Math.PI / 180, size = Math.max(4.6, Math.min(8.5, 100 / n));
-    wedges.forEach((label, i) => {
+  const WHEEL_END = .42, DIAL_START = .5, DIAL_END = .78;
+  let wedges = [], dialOrder = [], rot = { wheel: 0, dial: 0 }, spunFor = null, landedFor = null, dialFor = null, worthFor = null;
+  function drawWheel(svg, labels, size, reach, hub){
+    svg.textContent = '';
+    const n = labels.length, seg = 360 / n, rad = d => d * Math.PI / 180;
+    labels.forEach((label, i) => {
       const g = document.createElementNS(SVGNS, 'g'); g.dataset.i = i;
       const a0 = rad(i * seg), a1 = rad((i + 1) * seg);
       const p = document.createElementNS(SVGNS, 'path');
@@ -346,41 +360,63 @@
         : 'M0,0 L' + (100 * Math.cos(a0)).toFixed(3) + ',' + (100 * Math.sin(a0)).toFixed(3) + ' A100,100 0 0 1 ' + (100 * Math.cos(a1)).toFixed(3) + ',' + (100 * Math.sin(a1)).toFixed(3) + ' Z');
       p.setAttribute('fill', i % 2 ? '#172428' : '#0f181b');
       const t = document.createElementNS(SVGNS, 'text');
-      t.setAttribute('transform', 'rotate(' + ((i + .5) * seg).toFixed(3) + ') translate(95,0)');
+      t.setAttribute('transform', 'rotate(' + ((i + .5) * seg).toFixed(3) + ') translate(' + reach + ',0)');
       t.setAttribute('text-anchor', 'end'); t.setAttribute('dominant-baseline', 'central'); t.setAttribute('font-size', size.toFixed(2));
       t.textContent = label;
       g.append(p, t); svg.append(g);
     });
-    const hub = document.createElementNS(SVGNS, 'circle'); hub.setAttribute('r', 13); hub.setAttribute('fill', '#0b0e0f'); hub.setAttribute('stroke', '#00B050'); hub.setAttribute('stroke-width', 1.2);
-    svg.append(hub);
-    spunFor = null; landedFor = null;
+    const c = document.createElementNS(SVGNS, 'circle'); c.setAttribute('r', hub); c.setAttribute('fill', '#0b0e0f'); c.setAttribute('stroke', '#00B050'); c.setAttribute('stroke-width', hub > 14 ? 2.4 : 1.2);
+    svg.append(c);
   }
+  function buildWheel(){
+    wedges = [];
+    cards.forEach(c => { if (!wedges.includes(c.short)) wedges.push(c.short); });
+    drawWheel($('wheel'), wedges, Math.max(4.6, Math.min(8.5, 100 / wedges.length)), 95, 13);
+    dialOrder = levels.concat(levels);                               // easy, medium, hard, easy, medium, hard
+    drawWheel($('dial'), dialOrder.map(l => String(l.pts)), 30, 92, 17);
+    spunFor = null; landedFor = null; dialFor = null; worthFor = null;
+  }
+  /* Turn one of the wheels so that `target` degrees is under its pointer, taking `left` ms. Joined too late to see
+     it turn: it is simply put where it stops. */
+  function turn(svg, key, target, left, turns, freq){
+    svg.style.transition = 'none';
+    if (left > 600) {
+      svg.style.transform = 'rotate(' + rot[key] + 'deg)'; void svg.getBoundingClientRect();
+      rot[key] = rot[key] + 360 * turns + ((target - (rot[key] % 360) + 360) % 360);
+      svg.style.transition = 'transform ' + left + 'ms cubic-bezier(.12,.62,.1,1)';
+      sfx.spin(left / 1000, freq);
+    } else rot[key] = target;
+    svg.style.transform = 'rotate(' + rot[key] + 'deg)';
+  }
+  // where a wheel of n wedges must be turned for wedge w to sit under the pointer: a little off its centre,
+  // differently each round, so it looks like a real stop
+  const stopAt = (w, n, salt) => { const seg = 360 / n, jitter = (((salt * 7919) % 1000) / 1000 - .5) * .56 * seg; return (((-(w + .5) * seg + jitter) % 360) + 360) % 360; };
   function spinWheel(tl){
-    const c = cards[tl.qi], n = wedges.length, seg = 360 / n, w = Math.max(0, wedges.indexOf(c.short));
-    const turnMs = T.spin * 0.72;                                   // the rest of the spin phase is for reading the result
-    const svg = $('wheel'), box = $('spin');
+    const c = cards[tl.qi], w = Math.max(0, wedges.indexOf(c.short));
+    const wheelEnd = T.spin * WHEEL_END, dialStart = T.spin * DIAL_START, dialEnd = T.spin * DIAL_END;
+    const svg = $('wheel'), dial = $('dial'), box = $('spin');
+    // the difficulty appears twice on the small spinner: alternate which of the two it stops on
+    const hits = dialOrder.map((l, i) => (l.d === c.d ? i : -1)).filter(i => i >= 0), k = hits.length ? hits[tl.s % hits.length] : 0;
     if (spunFor !== tl.s) {
-      spunFor = tl.s; landedFor = null; box.classList.remove('landed');
-      svg.querySelectorAll('.win').forEach(g => g.classList.remove('win'));
+      spunFor = tl.s; landedFor = null; dialFor = null; worthFor = null; box.classList.remove('landed', 'worthy');
+      box.querySelectorAll('.win').forEach(g => g.classList.remove('win'));
       $('spinNum').textContent = 'Round ' + pad(tl.qi + 1) + ' of ' + pad(cards.length);
-      $('spinCat').textContent = c.cat; $('spinPts').textContent = c.pts + ' points'; $('spinTier').textContent = c.tier;
-      // land a little off the wedge's centre, differently each round, so it looks like a real stop
-      const jitter = (((tl.s * 7919) % 1000) / 1000 - .5) * .56 * seg;
-      const target = (((-(w + .5) * seg + jitter) % 360) + 360) % 360;
-      const left = turnMs - tl.into;
-      svg.style.transition = 'none';
-      if (left > 700) {
-        svg.style.transform = 'rotate(' + rot + 'deg)'; void svg.getBoundingClientRect();
-        rot = rot + 360 * 5 + ((target - (rot % 360) + 360) % 360);
-        svg.style.transition = 'transform ' + left + 'ms cubic-bezier(.12,.62,.1,1)';
-        sfx.spin(left / 1000);
-      } else rot = target;                                           // joined late: skip to where it stops
-      svg.style.transform = 'rotate(' + rot + 'deg)';
+      $('spinCat').textContent = c.cat; $('spinPts').textContent = c.pts; $('spinTier').textContent = c.tier;
+      turn(svg, 'wheel', stopAt(w, wedges.length, tl.s), wheelEnd - tl.into, 4, 980);
     }
-    if (tl.into >= turnMs && landedFor !== tl.s) {
+    if (tl.into >= wheelEnd && landedFor !== tl.s) {                 // the subject is in; the small spinner comes up
       landedFor = tl.s; box.classList.add('landed');
       const g = svg.querySelector('g[data-i="' + w + '"]'); if (g) g.classList.add('win');
       sfx.land();
+    }
+    if (tl.into >= dialStart && dialFor !== tl.s) {
+      dialFor = tl.s;
+      turn(dial, 'dial', stopAt(k, dialOrder.length, tl.s + 3), dialEnd - tl.into, 3, 1320);
+    }
+    if (tl.into >= dialEnd && worthFor !== tl.s) {                   // the difficulty is in: show what the round is worth
+      worthFor = tl.s; box.classList.add('worthy');
+      const g = dial.querySelector('g[data-i="' + k + '"]'); if (g) g.classList.add('win');
+      sfx.worth(c.d);
     }
   }
 

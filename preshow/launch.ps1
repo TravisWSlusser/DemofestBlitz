@@ -232,7 +232,7 @@ try {
   # otherwise a laptop clock that is a few seconds off would cut to the deck early or late.
   [Net.ServicePointManager]::SecurityProtocol = [Net.ServicePointManager]::SecurityProtocol -bor [Net.SecurityProtocolType]::Tls12
   $site = ([uri]$Url).GetLeftPart([UriPartial]::Authority)
-  $script:srvOffsetMs = 0.0; $SPIN = 6.0; $ASK = 17.0; $ANS = 8.0; $FIN = 20.0; $sampleN = 6; $bestRtt = [double]::MaxValue
+  $script:srvOffsetMs = 0.0; $SPIN = 8.0; $ASK = 17.0; $ANS = 8.0; $FIN = 20.0; $sampleN = 6; $bestRtt = [double]::MaxValue
   for ($i = 0; $i -lt 3; $i++) {
     try {
       $t0 = Get-Date; $st = Invoke-RestMethod -Uri "$site/api/preshow/state?show=preview" -TimeoutSec 8; $t1 = Get-Date

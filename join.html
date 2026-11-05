@@ -91,7 +91,7 @@
     <section class="view" id="join">
       <div class="k">DevLearn 2026 │ Session 609</div>
       <h1>Play along</h1>
-      <p>Your name goes on the big screen. A wheel picks each round and what it is worth. Answer on your phone: right answers score, faster answers score more, and deep cuts are worth the most.</p>
+      <p>Your name goes on the big screen. A wheel picks each subject, then a second spin sets how hard it is. Answer on your phone: right answers score, faster answers score more, and hard rounds are worth the most.</p>
       <form id="form" autocomplete="off">
         <input id="name" name="pn" type="text" maxlength="18" placeholder="Your name" autocomplete="off" autocapitalize="words" spellcheck="false" enterkeyhint="go" required>
         <button class="go" id="go" type="submit">Join the game</button>
@@ -137,7 +137,8 @@
   const pad = n => String(n).padStart(2, '0');
   const LETTERS = ['A', 'B', 'C', 'D'];
 
-  let T = { spin: 6000, ask: 17000, answer: 8000, final: 20000 };
+  let T = { spin: 8000, ask: 17000, answer: 8000, final: 20000 };
+  const WHEEL_END = .42, DIAL_END = .78;   // shares of the spin phase: when the wheel, then the difficulty spinner, stop on the big screen (as in preshow.html)
   let cards = [], reveals = {}, offset = 0, synced = false;
   let me = null;                       // { token, name }
   let stat = null;                     // my latest numbers from the server
@@ -217,12 +218,13 @@
   function draw(force){
     const tl = timeline(srvNow());
     const c = cards[tl.qi];
-    const landed = tl.phase !== 'spin' || tl.into >= T.spin * 0.72;       // the wheel on the big screen has stopped
+    const landed = tl.phase !== 'spin' || tl.into >= T.spin * WHEEL_END;  // the wheel on the big screen has stopped on a subject
+    const worthy = tl.phase !== 'spin' || tl.into >= T.spin * DIAL_END;   // and the second spinner on a difficulty
     const waiting = tl.phase === 'intro' || tl.phase === 'spin';
     const rev = tl.reveal ? reveals[tl.qi] : null;
     if (tl.s !== slot) { slot = tl.s; pick = null; late = false; revealAsk = 0; revealDelay = 150 + Math.random() * 900; drawn = ''; }
     const introSecs = Math.ceil(tl.intro / 1000);
-    const key = tl.s + ':' + tl.phase + ':' + landed + ':' + (rev ? 'a' : '') + ':' + pick + ':' + late + ':' + (stat ? stat.score + '/' + stat.pts : '') + ':' + (tl.phase === 'intro' ? introSecs : '');
+    const key = tl.s + ':' + tl.phase + ':' + landed + worthy + ':' + (rev ? 'a' : '') + ':' + pick + ':' + late + ':' + (stat ? stat.score + '/' + stat.pts : '') + ':' + (tl.phase === 'intro' ? introSecs : '');
     if (!force && key === drawn) return; drawn = key;
     $('play').classList.toggle('waiting', waiting);
     drawMe();
@@ -230,14 +232,14 @@
       $('waitK').textContent = 'You are in';
       $('waitBig').textContent = 'First spin in ' + Math.floor(introSecs / 60) + ':' + pad(introSecs % 60);
       $('waitWorth').textContent = '';
-      $('waitSub').textContent = 'Watch the big screen. A wheel picks each round and what it is worth. Your answers go here.';
+      $('waitSub').textContent = 'Watch the big screen. A wheel picks each subject, then a second spin sets what it is worth. Your answers go here.';
       return;
     }
     if (tl.phase === 'spin') {
       $('waitK').textContent = 'Round ' + pad(tl.qi + 1) + ' of ' + pad(cards.length);
       $('waitBig').textContent = landed ? c.cat : 'The wheel is spinning…';
-      $('waitWorth').textContent = landed ? c.pts + ' points · ' + c.tier : '';
-      $('waitSub').textContent = landed ? (c.line ? 'Get ready. A line is coming: say where it is from.' : 'Get ready. The question opens in a moment.') : 'Watch the big screen.';
+      $('waitWorth').textContent = worthy ? c.tier + ' · ' + c.pts + ' points' : landed ? 'Now for the difficulty…' : '';
+      $('waitSub').textContent = worthy ? (c.line ? 'Get ready. A line is coming: say where it is from.' : 'Get ready. The question opens in a moment.') : 'Watch the big screen.';
       return;
     }
     const num = $('num'); num.textContent = 'Round ' + pad(tl.qi + 1) + ' of ' + pad(cards.length) + ' │ ';

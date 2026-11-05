@@ -5,7 +5,7 @@ import { readFileSync, writeFileSync } from 'node:fs';
 const b = JSON.parse(readFileSync(process.argv[2], 'utf8'));
 const esc = s => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 const in10 = new Map(b.sets['10'].map((id, i) => [id, i + 1])), in15 = new Map(b.sets['15'].map((id, i) => [id, i + 1]));
-const PTS = { 1: '100', 2: '200', 3: '300' }, L = ['A', 'B', 'C', 'D'];
+const PTS = { 1: '100', 2: '300', 3: '500' }, L = ['A', 'B', 'C', 'D'];
 let rows = '';
 for (const [key, cat] of Object.entries(b.categories)) {
   const qs = b.bank.filter(q => q.cat === key);
@@ -30,10 +30,12 @@ table{border-collapse:collapse;width:100%;background:#fff}th,td{border:1px solid
 @media print{body{background:#fff;padding:0}h2{break-after:avoid}tr{break-inside:avoid}}
 </style></head><body>
 <h1>Pre-Show Questions to Vet</h1>
-<p>${b.bank.length} questions in the bank. The 10-minute show plays ${b.sets['10'].length} of them and the 15-minute show plays ${b.sets['15'].length}. The rest are spares.</p>
-<div class="note"><p><b>How to read this.</b> The right answer is green with a tick. Points are the difficulty: 100 warm-up, 200 fan favourite, 300 deep cut, and a fast answer can earn up to double. The wheel shows a theme, never the name of the film or show, so the category does not give the answer away. Quote Unquote rounds show only the line and ask where it is from.</p>
+<p>${b.bank.length} questions in the bank. The 10-minute show plays ${b.sets['10'].length} of them and the 15-minute show plays ${b.sets['15'].length}. The rest are spares, which a fresh draw may bring in.</p>
+<div class="note"><p><b>How to read this.</b> The right answer is green with a tick. Points are the difficulty: 100 easy, 300 medium, 500 hard, and a fast answer can earn up to double. Each round has two spins: the wheel lands on a subject (a theme, never the name of the film or show), then a second spinner lands on the difficulty. Quote Unquote rounds show only the line and ask where it is from.</p>
+<p><b>How the running orders were made.</b> For every round the difficulty was drawn at random, then a question of that subject and difficulty was drawn from this bank. Early rounds lean easy and late rounds lean hard, and the last round is always hard, so someone who sits down halfway can still catch up. The draw is fixed here, ahead of the show, so you can read exactly what will play. Ask Claude to "deal again" for a fresh draw.</p>
 <p><b>How to change anything.</b> Tell Claude the ID and what you want, for example "bt4: wrong, cut it", "swap gm6 into the 10-minute set for mk2", or "add a Hersheypark question about ...". This sheet is a snapshot: it is rebuilt whenever the bank changes.</p>
 <p><b>Check before the show.</b> Every question was written from memory, not looked up. Please read each one that plays, and anything you would be embarrassed to get wrong in front of the room. Question <span class="id">bt3</span> says "Today is November 5" and only works on that date.</p></div>
+${b.sets.test ? order('test', b.sets.test) : ''}
 ${order('10-minute', b.sets['10'])}
 ${order('15-minute', b.sets['15'])}
 ${rows}
