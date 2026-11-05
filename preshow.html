@@ -130,7 +130,9 @@
      so every run gets its own empty leaderboard. Without it the page runs as an endless preview. */
   const API = '/api/preshow/';
   const POLL_MS = 2500, OUT_MS = 1100;
-  const at = Number(new URLSearchParams(location.search).get('at')) || 0;
+  // ?in=<minutes> is a shortcut for testing by link: show time is that many minutes after the page loads
+  const qs0 = new URLSearchParams(location.search);
+  const at = Number(qs0.get('at')) || (Number(qs0.get('in')) > 0 ? Math.round((Date.now() + Number(qs0.get('in')) * 60000) / 1000) * 1000 : 0);
   const show = at ? String(at) : 'preview';
   const $ = id => document.getElementById(id);
   const pad = n => String(n).padStart(2, '0');
