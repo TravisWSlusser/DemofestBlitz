@@ -83,6 +83,12 @@
   @keyframes bump { 0% { background: rgba(0,176,80,.28); } 100% { background: transparent; } }
   .board .empty { font-weight: 300; font-size: 1.3cqw; color: var(--soft); padding-top: 1.6cqh; }
 
+  /* holding X stops the pre-show (the launcher does the stopping; this only shows the hold being counted) */
+  .exit { position: absolute; left: 50%; top: 5cqh; transform: translateX(-50%); padding: 1cqh 1.6cqw 1.3cqh; background: rgba(0,0,0,.72); border: 1px solid var(--line); font-weight: 500; font-size: 1.3cqw; letter-spacing: .04em; display: none; }
+  .exit i { display: block; height: .3cqw; margin-top: .9cqh; background: var(--green); transform-origin: left center; transform: scaleX(0); }
+  body.exiting .exit { display: block; }
+  body.exiting .exit i { transform: scaleX(1); transition: transform 1.5s linear; }
+
   /* the closing card: the last seconds before the talk */
   .final { position: absolute; left: 3.9cqw; bottom: 13.2cqh; display: none; }
   .final .k { font-weight: 500; font-size: 1.95cqw; color: var(--green); margin-bottom: 1cqh; }
@@ -125,6 +131,7 @@
         </div>
       </aside>
 
+      <div class="exit">Keep holding X to exit<i></i></div>
       <div class="cap"><span class="who">Announcer</span><span class="say" id="capText"></span></div>
       <div class="foot">DevLearn 2026 &nbsp;│&nbsp; Session 609 &nbsp;│&nbsp; Travis Slusser, Senior Learning Strategist, GSE, Qlik</div>
     </div>
@@ -183,6 +190,9 @@
   };
   addEventListener('keydown', e => { if (e.key === 'm' || e.key === 'M') { sfxOn = !sfxOn; if (sfxOn) sfx.join(); } });
   addEventListener('pointerdown', () => audio(), { once: true });
+  addEventListener('keydown', e => { if ((e.key === 'x' || e.key === 'X') && !e.repeat) document.body.classList.add('exiting'); });
+  addEventListener('keyup', e => { if (e.key === 'x' || e.key === 'X') document.body.classList.remove('exiting'); });
+  addEventListener('blur', () => document.body.classList.remove('exiting'));
 
   /* Captions for the announcer. `state` hands over the line being spoken: when it starts (server time) and its phrases
      with their timings. Each phrase is shown while it is being said. */

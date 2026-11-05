@@ -6,7 +6,9 @@
   3. At show time the page fades to black and Chrome is closed. PowerPoint's black screen is underneath,
      then slide 1 starts fresh (its animations and timings begin at that moment, not ten minutes earlier).
 
-  Nothing to press. Alt+F4 on the kiosk window ends the pre-show early; the deck is revealed the same way.
+  Nothing to press. Two ways out:
+    Alt+F4 on the kiosk window  ends the pre-show early and goes to the deck, as if show time had come.
+    Holding X for 1.5 seconds   stops everything: music, voice, the kiosk window and the slideshow.
   The deck file is never modified. Settings are passed in by Pre-Show.cmd.
 #>
 param(
@@ -81,6 +83,8 @@ public static class PreShowWin {
   [DllImport("user32.dll")] public static extern bool AttachThreadInput(uint a, uint b, bool attach);
   [DllImport("user32.dll")] public static extern void keybd_event(byte vk, byte scan, uint flags, UIntPtr extra);
   [DllImport("kernel32.dll")] public static extern uint GetCurrentThreadId();
+  [DllImport("user32.dll")] public static extern short GetAsyncKeyState(int vk);
+  public static bool XDown() { return (GetAsyncKeyState(0x58) & 0x8000) != 0; }
   [DllImport("kernel32.dll")] public static extern uint SetThreadExecutionState(uint flags);
   // Ten minutes with nobody touching the laptop: keep the display and the machine awake while this script is running.
   public static void StayAwake() { SetThreadExecutionState(0x80000000 | 0x00000002 | 0x00000001); }
@@ -214,8 +218,14 @@ public static class PreShowWin {
 
   $nextNudge = (Get-Date).AddSeconds(240)
   if ($Nudge) { Say 'Nudge is on: an F15 key tap every 4 minutes keeps the idle lock away.' }
+  $abort = $false; $xSince = $null
   while ((SNow) -lt $target) {
-    Start-Sleep -Milliseconds 200
+    for ($k = 0; $k -lt 4 -and -not $abort; $k++) {                # 200 ms a turn, looking at the X key every 50
+      Start-Sleep -Milliseconds 50
+      if ([PreShowWin]::XDown()) { if (-not $xSince) { $xSince = Get-Date } elseif (((Get-Date) - $xSince).TotalSeconds -ge 1.5) { $abort = $true } }
+      else { $xSince = $null }
+    }
+    if ($abort) { Say 'X was held down: stopping the pre-show.'; break }
     if (-not (KioskProcs)) { Say 'Kiosk closed by hand; revealing the deck now.'; break }
     $sn = SNow
     foreach ($a in $plan) {
@@ -264,6 +274,12 @@ public static class PreShowWin {
   }
   if ($mp) { try { $mp.Stop(); $mp.Close() } catch {} }
   if ($vp) { try { $vp.Stop(); $vp.Close() } catch {} }
+  if ($abort) {                                                    # the full stop: no deck, back to the desktop
+    KioskProcs | ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }
+    try { $ssw.View.Exit() } catch {}
+    Say 'Pre-show stopped. The slideshow was closed; the deck itself is untouched.'
+    exit 0
+  }
 
   # By now the page has let its words fade and shows only the deck's background. Start slide 1 while the slideshow is
   # still hidden under the browser, then lift it above the browser and give it the keyboard, and only then close the

@@ -387,12 +387,12 @@ async function speak(key, model, text) {
   const body = JSON.stringify({ text, model_id: model });
   try {
     const r = await fetch(base + '/with-timestamps?output_format=mp3_44100_128', { method: 'POST', headers, body, signal: AbortSignal.timeout(9000) });
-    if (r.ok) { const j = await r.json(); if (j && j.audio_base64) return { ok: true, b64: j.audio_base64, alignment: j.alignment || null }; }
+    if (r.ok) { const j = await r.json(); if (j && j.audio_base64) return { ok: true, b64: j.audio_base64, alignment: j.alignment || null, cost: r.headers.get('character-cost') }; }
     else if (r.status === 401 || r.status === 429) return { ok: false, status: r.status, detail: (await r.text().catch(() => '')).slice(0, 400) };
   } catch (_) { /* fall through to the plain request */ }
   try {
     const r = await fetch(base + '?output_format=mp3_44100_128', { method: 'POST', headers: { ...headers, Accept: 'audio/mpeg' }, body, signal: AbortSignal.timeout(12000) });
-    if (r.ok) return { ok: true, b64: Buffer.from(await r.arrayBuffer()).toString('base64'), alignment: null };
+    if (r.ok) return { ok: true, b64: Buffer.from(await r.arrayBuffer()).toString('base64'), alignment: null, cost: r.headers.get('character-cost') };
     return { ok: false, status: r.status, detail: (await r.text().catch(() => '')).slice(0, 400) };   // ElevenLabs' own explanation; it never contains the key
   } catch (_) { return { ok: false, status: 504, detail: model + ' did not answer in time' }; }
 }
@@ -459,6 +459,8 @@ async function announce(req, res) {
   const cues = JSON.stringify(cap.parts);
   await sql`INSERT INTO preshow_voice (show, slot, line, leader, audio, cues, ms) VALUES (${rowShow}, ${slot}, ${line}, ${leader}, ${got.b64}, ${cues}, ${ms}) ON CONFLICT (show, slot) DO NOTHING`;
   res.setHeader('X-Voice-Model', usedModel);
+  res.setHeader('X-Voice-Chars', String(line.length));
+  if (got.cost) res.setHeader('X-Voice-Cost', String(got.cost));       // credits ElevenLabs charged for this line
   res.setHeader('X-Voice-Captions', cap.exact ? 'timed' : 'estimated');
   return send(line, got.b64, cues, ms);
 }
