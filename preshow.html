@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Pre-Show · Side-Qlik</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=VT323&family=Share+Tech+Mono&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="assets/booth.css">
+<style>
+  /* Placeholder while the trivia format is being decided: proves the slide pipeline end to end. */
+  .content { align-items: center; justify-content: center; text-align: center; gap: 14px; }
+  .logo { height: clamp(90px, 16vh, 160px); filter: drop-shadow(0 0 18px rgba(16,207,201,.5)); }
+  h1 { font-family: 'VT323', monospace; font-size: clamp(40px, 7vw, 92px); line-height: .95; letter-spacing: .05em; color: #fff; margin: 0; text-shadow: 0 0 22px rgba(16,207,201,.35); }
+  .clock { font-family: 'VT323', monospace; font-size: clamp(60px, 12vw, 150px); color: var(--cyan); line-height: 1; letter-spacing: .04em; }
+</style>
+</head>
+<body>
+  <video class="bg-video" autoplay muted loop playsinline><source src="assets/brand/RecRoom_bg_loop1.webm" type="video/webm"></video>
+  <div class="bg-overlay"></div>
+  <div class="scanlines"></div>
+  <div class="content">
+    <video class="logo" autoplay muted loop playsinline poster="assets/brand/RecRoom_Logo1.png" aria-label="REC ROOM"><source src="assets/brand/REC_Room_logo_360.webm" type="video/webm"></video>
+    <h1>PRE-SHOW TRIVIA</h1>
+    <div class="label">live from the slide &middot; the clock proves it</div>
+    <div class="clock" id="clock">--:--:--</div>
+  </div>
+  <script>
+    'use strict';
+    const c = document.getElementById('clock');
+    const tick = () => { c.textContent = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }); };
+    tick(); setInterval(tick, 500);
+  </script>
+</body>
+</html>
