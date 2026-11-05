@@ -29,6 +29,7 @@
   .who[hidden] { display: none; }
   .who .card { position: relative; width: min(780px, 100%); max-height: 100%; overflow: auto; padding: 26px 34px 28px; background: #0b1528; text-align: left; animation: whoIn .22s ease both; }
   @keyframes whoIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
+  .who .qlogo { display: block; height: clamp(46px, 7.5vh, 76px); width: auto; margin: 0 0 16px; }
   .who h2 { font-family: 'VT323', monospace; font-weight: normal; font-size: clamp(30px, 4.4vh, 46px); line-height: 1; letter-spacing: .04em; color: #fff; margin: 10px 0 12px; text-shadow: 0 0 18px rgba(16,207,201,.35); }
   .who p, .who li { font-family: 'VT323', monospace; font-size: clamp(18px, 2.5vh, 24px); line-height: 1.22; color: var(--ink); }
   .who p { margin: 0 0 12px; }
@@ -153,6 +154,7 @@
   <div class="who" id="who" hidden role="dialog" aria-modal="true" aria-labelledby="whoTitle">
     <div class="card frame">
       <div class="corner tl"></div><div class="corner tr"></div><div class="corner bl"></div><div class="corner br"></div>
+      <img class="qlogo" src="assets/brand/qlik_logo.png" alt="Qlik">
       <div class="label">Who is Qlik?</div>
       <h2 id="whoTitle">QLIK TURNS DATA INTO DECISIONS</h2>
       <p>Qlik is a software company. Its products help organizations bring their data together, make sure it can be trusted, and use it to decide what to do next.</p>
