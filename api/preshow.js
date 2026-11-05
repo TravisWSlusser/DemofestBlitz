@@ -86,7 +86,7 @@ function timeline(show, now) {
 
 /* Names go on a big screen in front of a room: keep them short, plain, and clean. */
 const RUDE_ANYWHERE = ['fuck', 'shit', 'bitch', 'cunt', 'nigg', 'faggot', 'whore', 'slut', 'penis', 'vagina', 'porn', 'hitler', 'nazi', 'asshole', 'dickhead', 'wank', 'twat', 'pussy', 'retard'];
-const RUDE_WORDS = ['ass', 'cock', 'dick', 'fag', 'rape', 'cum', 'tit', 'tits', 'sex', 'anal', 'kkk', 'hoe'];
+const RUDE_WORDS = ['ass', 'cock', 'fag', 'rape', 'cum', 'tit', 'tits', 'sex', 'anal', 'kkk', 'hoe'];
 function isRude(name) {
   const plain = name.toLowerCase().replace(/0/g, 'o').replace(/[1!|]/g, 'i').replace(/3/g, 'e').replace(/[4@]/g, 'a').replace(/[5$]/g, 's').replace(/7/g, 't');
   const squashed = plain.replace(/[^a-z]/g, '');
