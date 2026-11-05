@@ -42,6 +42,9 @@
   .me .nm { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .me .sc { color: var(--green); white-space: nowrap; }
   .qwrap { margin-top: auto; padding-top: 18px; }
+  .lead { font-weight: 300; font-size: 1rem; color: var(--soft); margin-top: 8px; display: none; }
+  .qwrap.line .lead { display: block; }
+  .qwrap.line .q { margin-top: 2px; }
   .q { font-stretch: 75%; font-weight: 900; font-size: 1.65rem; line-height: 1.08; margin: 8px 0 14px; }
   .bar { height: 3px; background: var(--line); margin-bottom: 14px; }
   .bar i { display: block; height: 100%; background: var(--green); transform-origin: left center; }
@@ -106,6 +109,7 @@
       </div>
       <div class="qwrap">
         <div class="k" id="num"></div>
+        <div class="lead">Where is this line from?</div>
         <div class="q" id="q"></div>
         <div class="bar"><i id="bar"></i></div>
         <div class="opts" id="opts"></div>
@@ -233,12 +237,12 @@
       $('waitK').textContent = 'Round ' + pad(tl.qi + 1) + ' of ' + pad(cards.length);
       $('waitBig').textContent = landed ? c.cat : 'The wheel is spinning…';
       $('waitWorth').textContent = landed ? c.pts + ' points · ' + c.tier : '';
-      $('waitSub').textContent = landed ? 'Get ready. The question opens in a moment.' : 'Watch the big screen.';
+      $('waitSub').textContent = landed ? (c.line ? 'Get ready. A line is coming: say where it is from.' : 'Get ready. The question opens in a moment.') : 'Watch the big screen.';
       return;
     }
     const num = $('num'); num.textContent = 'Round ' + pad(tl.qi + 1) + ' of ' + pad(cards.length) + ' │ ';
     const b = document.createElement('b'); b.textContent = c.cat; num.append(b, ' │ ' + c.pts + ' pts');
-    $('q').textContent = c.q;
+    $('q').textContent = c.q; document.querySelector('.qwrap').classList.toggle('line', !!c.line);
     const box = $('opts');
     if (box.dataset.slot !== String(tl.s)) {
       box.dataset.slot = String(tl.s); box.textContent = '';

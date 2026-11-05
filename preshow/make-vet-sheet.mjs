@@ -31,7 +31,7 @@ table{border-collapse:collapse;width:100%;background:#fff}th,td{border:1px solid
 </style></head><body>
 <h1>Pre-Show Questions to Vet</h1>
 <p>${b.bank.length} questions in the bank. The 10-minute show plays ${b.sets['10'].length} of them and the 15-minute show plays ${b.sets['15'].length}. The rest are spares.</p>
-<div class="note"><p><b>How to read this.</b> The right answer is green with a tick. Points are the difficulty: 100 warm-up, 200 fan favourite, 300 deep cut, and a fast answer can earn up to double. "Where's That Line From?" questions show only the quote on screen; the wheel calls that category by name so the source stays hidden.</p>
+<div class="note"><p><b>How to read this.</b> The right answer is green with a tick. Points are the difficulty: 100 warm-up, 200 fan favourite, 300 deep cut, and a fast answer can earn up to double. The wheel shows a theme, never the name of the film or show, so the category does not give the answer away. Quote Unquote rounds show only the line and ask where it is from.</p>
 <p><b>How to change anything.</b> Tell Claude the ID and what you want, for example "bt4: wrong, cut it", "swap gm6 into the 10-minute set for mk2", or "add a Hersheypark question about ...". This sheet is a snapshot: it is rebuilt whenever the bank changes.</p>
 <p><b>Check before the show.</b> Every question was written from memory, not looked up. Please read each one that plays, and anything you would be embarrassed to get wrong in front of the room. Question <span class="id">bt3</span> says "Today is November 5" and only works on that date.</p></div>
 ${order('10-minute', b.sets['10'])}

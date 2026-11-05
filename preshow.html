@@ -72,6 +72,8 @@
   .card { position: absolute; left: 3.9cqw; right: 31cqw; bottom: 13.2cqh; }
   .card .num { font-weight: 500; font-size: 1.46cqw; color: var(--green); letter-spacing: .04em; margin-bottom: 1.4cqh; }
   .card .num b { color: #fff; font-weight: 500; }
+  .card .lead { font-weight: 300; font-size: 2cqw; color: var(--soft); margin-bottom: .6cqh; display: none; }
+  .card.line .lead { display: block; }
   .card .q { font-stretch: 75%; font-weight: 900; font-size: 3.4cqw; line-height: 1.08; letter-spacing: -.005em; margin: 0 0 3.2cqh; text-wrap: balance; }
   .answers { list-style: none; margin: 0; padding: 0; display: grid; gap: 1.4cqh; }
   .answers li { display: grid; grid-template-columns: 2.6cqw 1fr; align-items: baseline; font-weight: 400; font-size: 2.1cqw; line-height: 1.15;
@@ -170,6 +172,7 @@
 
       <div class="card" id="card">
         <div class="num" id="num"></div>
+        <div class="lead">Where is this line from?</div>
         <h1 class="q" id="q"></h1>
         <ul class="answers" id="answers"></ul>
         <div class="after"><div class="fact" id="fact"></div><div class="stat" id="stat"></div></div>
@@ -391,7 +394,7 @@
     if (fresh) {
       const num = $('num'); num.textContent = 'Round ' + pad(tl.qi + 1) + ' of ' + pad(cards.length) + '  │  ';
       const b = document.createElement('b'); b.textContent = c.cat; num.append(b, '  │  ' + c.pts + ' points');
-      $('q').textContent = c.q;
+      $('q').textContent = c.q; card.classList.toggle('line', !!c.line);
       const ul = $('answers'); ul.textContent = '';
       c.a.forEach((t, n) => {
         const li = document.createElement('li');
