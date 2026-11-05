@@ -6,4 +6,5 @@ rem    NUDGE  : leave empty. Set to -Nudge only if a rehearsal shows the laptop 
 set SHOWAT=13:00
 set DECK=
 set NUDGE=
-start "" /min powershell -NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File "%~dp0launch.ps1" -ShowAt %SHOWAT% -Deck "%DECK%" %NUDGE%
+set VOLUME=0.5
+start "" /min powershell -NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File "%~dp0launch.ps1" -ShowAt %SHOWAT% -Deck "%DECK%" %NUDGE% -MusicVolume %VOLUME%
