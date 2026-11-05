@@ -89,7 +89,9 @@
   #done .bye { font-size: 1.85rem; margin: 12px 0 8px; }
   #done .bye + p { margin-bottom: 4px; }
   #done .li { display: block; text-align: center; text-decoration: none; }
-  #done .li.alt { margin-top: 10px; margin-bottom: 16px; background: transparent; color: #fff; border: 2px solid var(--green); padding: 15px; }   /* opens an email to the presenter, subject filled in */
+  /* the two outlined buttons: an email to the presenter with the subject filled in, and the Demofest booth's take-home page */
+  #done .li.alt { margin-top: 10px; background: transparent; color: #fff; border: 2px solid var(--green); padding: 15px; }
+  #done .li.alt:last-of-type { margin-bottom: 16px; }
 </style>
 </head>
 <body>
@@ -135,6 +137,7 @@
       <p id="doneText"></p>
       <a class="go li" href="https://www.linkedin.com/in/travis-slusser/" target="_blank" rel="noopener">Follow Travis on LinkedIn</a>
       <a class="go li alt" href="mailto:Travis.Slusser@Qlik.com?subject=DevLearn%202026%20Increasing%20Engagement%20Through%20Cinematic%20Storytelling%20Review">Write a review</a>
+      <a class="go li alt" href="/visit" target="_blank" rel="noopener">Explore the Demofest page</a>
       <div class="k">Phones on silent. Enjoy the show.</div>
     </section>
   </div>
