@@ -1,12 +1,14 @@
 // /api/preshow.js — the Session 609 pre-show game. vercel.json rewrites /api/preshow/<action> here.
 //
-// The big screen shows one trivia card at a time; phones join with a name and tap an answer; the screen shows a
-// live leaderboard. Everything runs off the SERVER clock:
-//   - a card is open for ASK_MS, then shows its answer for ANSWER_MS (one CYCLE);
-//   - which card is up at any moment is a pure function of the time and the show id, so the screen, every phone and
-//     this function agree without anyone "driving" the show;
+// The big screen spins a wheel, then shows one trivia card at a time; phones join with a name and tap an answer; the
+// screen shows a live leaderboard. Everything runs off the SERVER clock:
+//   - each card is one cycle: the wheel spins to its category and points (SPIN_MS), the question is open (ASK_MS),
+//     the answer shows (ANSWER_MS). Harder cards are worth more;
+//   - which card is up at any moment is a pure function of the time, the show id and how many cards the show has, so
+//     the screen, every phone and this function agree without anyone "driving" the show;
 //   - the show id is the show's start time in epoch ms (the launcher's ?at=). Each run therefore gets its own empty
-//     leaderboard, and the cards are aligned so the last one ends exactly when the closing countdown begins.
+//     leaderboard. Cards play in order and the last one ends exactly when the closing countdown begins;
+//   - a show's questions are handed over by the launcher when it claims the show. They are not in this repo.
 // Right answers never leave the server before the reveal. Player tokens travel in a header, not in the URL.
 //
 //   GET  state?show=&cards=1   (header X-Player-Token optional)  timing, cards, leaderboard, reveal, my score
@@ -14,14 +16,14 @@
 //   POST answer { show, choice }   (header X-Player-Token)       → { ok, pick }
 //   GET  announce?show=&kind=&play=                           the announcer's next line as mp3; registers its captions
 //   POST pair { hash } / GET pair?code=                          pair the presenter's phone with the launcher
-//   POST claim { show, hash }                                    the launcher claims a show for the paired phone
+//   POST claim { show, hash, cards }                             the launcher claims a show for the paired phone and hands over its questions
 //   GET  admin   (header X-Admin-Token)                          the control room: everything about the claimed show
 //   POST kick { id }  (header X-Admin-Token)                     remove a player
 //   GET  results  (header X-Admin-Key)                           CSV of every player in every show
 //   POST reset    (header X-Admin-Key)                           empties the two pre-show tables
 import { neon } from '@neondatabase/serverless';
 import { randomBytes, createHash } from 'node:crypto';
-import { QUESTIONS } from './_preshow-questions.js';
+import { SAMPLE_CARDS } from './_preshow-questions.js';
 
 const CONN = process.env.DATABASE_URL
   || process.env.DATABASE_URL_UNPOOLED
@@ -29,9 +31,10 @@ const CONN = process.env.DATABASE_URL
   || process.env.POSTGRES_URL;
 const sql = CONN ? neon(CONN) : null;
 
-const ASK_MS = 18000;       // a card is open for answers
+const SPIN_MS = 6000;       // the wheel spins and lands on the card's category and points (0 = no wheel)
+const ASK_MS = 17000;       // the card is open for answers
 const ANSWER_MS = 8000;     // then its answer is on screen
-const CYCLE = ASK_MS + ANSWER_MS;
+const CYCLE = SPIN_MS + ASK_MS + ANSWER_MS;
 const FINAL_MS = 20000;     // closing countdown before show time: no cards, no answers
 const GRACE_MS = 400;       // network slack for a tap made just before the reveal
 const BOARD_ROWS = 8;
@@ -77,6 +80,7 @@ function ensureTables() {
       // the control room: phone pairing codes, and which phone (by the hash of its token) administers which show
       await sql`CREATE TABLE IF NOT EXISTS preshow_pair (code text PRIMARY KEY, hash text NOT NULL, created_at timestamptz NOT NULL DEFAULT now(), taken_at timestamptz)`;
       await sql`CREATE TABLE IF NOT EXISTS preshow_admin (show text PRIMARY KEY, hash text NOT NULL, created_at timestamptz NOT NULL DEFAULT now())`;
+      await sql`ALTER TABLE preshow_admin ADD COLUMN IF NOT EXISTS cards text`;      // the show's own questions, as sent by the launcher
       await sql`ALTER TABLE preshow_voice ADD COLUMN IF NOT EXISTS cues text`;
       await sql`ALTER TABLE preshow_voice ADD COLUMN IF NOT EXISTS ms integer`;
       // the line being spoken right now in each show: when it starts (server time) and its captions, phrase by phrase.
@@ -103,15 +107,59 @@ const tokenOf = req => String(req.headers['x-player-token'] || '').slice(0, 64);
 const isAdmin = req => { const k = process.env.ADMIN_KEY; return !!k && String(req.headers['x-admin-key'] || '') === k; };
 const csvCell = v => { const s = v == null ? '' : String(v); return /[",\n\r]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s; };
 
-/* Where the show is at `now`. Cards are counted from an anchor chosen so a card boundary falls exactly on the start
-   of the closing countdown. s = slot number, into = ms into the slot, qi = which card. */
-function timeline(show, now) {
+/* ── the cards of a show ──────────────────────────────────────────────────────
+   A real show brings its own cards: the launcher sends them when it claims the show (see `claim`), and they are kept
+   with the claim. Anything else plays the built-in sample. Cards are checked once on the way in, so the rest of this
+   file can trust their shape. */
+const POINTS = [0, 100, 200, 300];                    // by difficulty: the deeper the cut, the more it is worth
+const TIERS = ['', 'Warm-up', 'Fan favourite', 'Deep cut'];
+const text = (v, max) => (typeof v === 'string' && v.trim() ? v.trim().slice(0, max) : '');
+function cleanCards(list) {
+  if (!Array.isArray(list) || list.length < 1 || list.length > 60) return null;
+  const out = [];
+  for (const c of list) {
+    if (!c || typeof c !== 'object') return null;
+    const q = text(c.q, 300), a = Array.isArray(c.a) && c.a.length === 4 ? c.a.map(x => text(x, 120)) : null;
+    const ok = Number(c.ok), d = [1, 2, 3].includes(Number(c.d)) ? Number(c.d) : 1;
+    if (!q || !a || a.some(x => !x) || !Number.isInteger(ok) || ok < 0 || ok > 3) return null;
+    const cat = text(c.cat, 40) || 'Trivia';
+    out.push({ q, a, ok, d, cat, short: (text(c.short, 16) || cat.slice(0, 16)).toUpperCase(), fact: text(c.fact, 300), line: c.kind === 'line' });
+  }
+  return out;
+}
+const SAMPLE = cleanCards(SAMPLE_CARDS);
+const shows = new Map();                              // show id → its own cards, once seen (a claim never changes)
+async function cardsOf(show) {
+  if (show === 'preview') return SAMPLE;
+  if (shows.has(show)) return shows.get(show);
+  const r = await sql`SELECT cards FROM preshow_admin WHERE show = ${show}`;
+  let cards = null;
+  if (r.length && r[0].cards) { try { cards = cleanCards(JSON.parse(r[0].cards)); } catch { cards = null; } }
+  if (!cards) return SAMPLE;                          // not remembered: the claim may still be on its way
+  if (shows.size > 40) shows.delete(shows.keys().next().value);
+  shows.set(show, cards);
+  return cards;
+}
+/* What the screen and the phones are given: everything except the right answer and its fact. */
+const publicCards = cards => cards.map(c => ({ q: c.q, a: c.a, cat: c.cat, short: c.short, d: c.d, pts: POINTS[c.d], tier: TIERS[c.d], line: c.line }));
+
+/* Where the show is at `now`, for a show with n cards. Each card is one cycle: the wheel spins (SPIN_MS), the question
+   is open (ASK_MS), the answer shows (ANSWER_MS). The cards run in order and the last one ends exactly when the
+   closing countdown begins, so card 1 starts n cycles before that; any time before it is the intro, when people join.
+   The endless preview has no end to count back from, so it simply loops on the clock.
+   idx = which card (0-based), into = ms into its cycle, askInto = ms since it opened for answers. */
+function timeline(show, now, n) {
   const at = show === 'preview' ? 0 : Number(show);
-  const anchor = at ? (at - FINAL_MS) % CYCLE : 0;
-  const s = Math.floor((now - anchor) / CYCLE);
-  const into = now - anchor - s * CYCLE;
-  const n = QUESTIONS.length;
-  return { at, s, into, qi: ((s % n) + n) % n, reveal: into >= ASK_MS, closed: at ? now >= at - FINAL_MS : false };
+  let idx = 0, into = 0, intro = 0, closed = false;
+  if (!at) { const s = Math.floor(now / CYCLE); idx = s % n; into = now - s * CYCLE; }
+  else {
+    const el = now - (at - FINAL_MS - n * CYCLE);
+    closed = now >= at - FINAL_MS;
+    if (el < 0) intro = -el;
+    else { idx = Math.min(n - 1, Math.floor(el / CYCLE)); into = el - idx * CYCLE; }
+  }
+  const phase = closed ? 'closed' : intro ? 'intro' : into < SPIN_MS ? 'spin' : into < SPIN_MS + ASK_MS ? 'ask' : 'answer';
+  return { at, idx, into, askInto: into - SPIN_MS, intro, phase, reveal: phase === 'answer', closed };
 }
 
 /* Names go on a big screen in front of a room: keep them short, plain, and clean. */
@@ -161,14 +209,15 @@ const cueOf = show => cached('cue:' + show, 800, async () => {
 async function state(req, res) {
   await ensureTables();
   const show = showOf(req.query.show);
-  const t = timeline(show, Date.now());
-  const out = { ask: ASK_MS, answer: ANSWER_MS, final: FINAL_MS, n: QUESTIONS.length, qi: t.qi, closed: t.closed };
-  if (req.query.cards) out.cards = QUESTIONS.map(c => ({ q: c.q, a: c.a }));
+  const cards = await cardsOf(show);
+  const t = timeline(show, Date.now(), cards.length);
+  const out = { spin: SPIN_MS, ask: ASK_MS, answer: ANSWER_MS, final: FINAL_MS, n: cards.length, qi: t.idx, phase: t.phase, closed: t.closed };
+  if (req.query.cards) out.cards = publicCards(cards);
   const board = await boardOf(show);
   out.top = board.top; out.players = board.players;
-  if (t.reveal && !t.closed) {
-    const c = QUESTIONS[t.qi];
-    out.reveal = { qi: t.qi, ok: c.ok, fact: c.fact || '', ...(await tallyOf(show, t.qi)) };
+  if (t.reveal) {
+    const c = cards[t.idx];
+    out.reveal = { qi: t.idx, ok: c.ok, fact: c.fact, ...(await tallyOf(show, t.idx)) };
   }
   const token = tokenOf(req);
   if (token) {
@@ -178,7 +227,7 @@ async function state(req, res) {
       const p = rows[0];
       const [rk, mine] = await Promise.all([
         sql`SELECT COUNT(*)::int + 1 AS rank FROM preshow_players WHERE show = ${show} AND score > ${p.score}`,
-        sql`SELECT choice, correct, pts FROM preshow_answers WHERE player_id = ${p.id} AND qi = ${t.qi}`,
+        sql`SELECT choice, correct, pts FROM preshow_answers WHERE player_id = ${p.id} AND qi = ${t.idx}`,
         sql`UPDATE preshow_players SET last_seen = now() WHERE id = ${p.id}`,          // "connected now" in the control room
       ]);
       out.me = { name: p.name, score: p.score, correct: p.correct, answered: p.answered, rank: rk[0].rank, pick: mine.length ? mine[0].choice : null };
@@ -196,7 +245,7 @@ async function join(req, res) {
   await ensureTables();
   const b = body(req);
   const show = showOf(b.show);
-  if (timeline(show, Date.now()).closed) return res.status(409).json({ error: 'The show is starting. The game is closed.' });
+  if (timeline(show, Date.now(), (await cardsOf(show)).length).closed) return res.status(409).json({ error: 'The show is starting. The game is closed.' });
   const name = String(b.name || '').normalize('NFKC').replace(/\s+/g, ' ').trim().slice(0, 18);
   if (name.length < 2) return res.status(400).json({ error: 'Enter a name, 2 to 18 characters.' });
   if (!/^[\p{L}\p{N} .'’-]+$/u.test(name)) return res.status(400).json({ error: 'Letters, numbers and spaces only.' });
@@ -216,21 +265,24 @@ async function answer(req, res) {
   const show = showOf(b.show);
   const choice = Number(b.choice);
   if (!Number.isInteger(choice) || choice < 0 || choice > 3) return res.status(400).json({ error: 'choice must be 0-3' });
-  const t = timeline(show, Date.now());
+  const cards = await cardsOf(show);
+  const t = timeline(show, Date.now(), cards.length);
   if (t.closed) return res.status(200).json({ ok: false, reason: 'closed' });
-  if (t.into > ASK_MS + GRACE_MS) return res.status(200).json({ ok: false, reason: 'late' });
+  if (t.phase === 'intro' || t.phase === 'spin') return res.status(200).json({ ok: false, reason: 'early' });
+  if (t.askInto > ASK_MS + GRACE_MS) return res.status(200).json({ ok: false, reason: 'late' });
   const token = tokenOf(req);
   const rows = token ? await sql`SELECT id FROM preshow_players WHERE token = ${token} AND show = ${show}` : [];
   if (!rows.length) return res.status(401).json({ error: 'Join the game first.' });
-  const pid = rows[0].id;
-  const correct = choice === QUESTIONS[t.qi].ok;
-  const ms = Math.min(t.into, ASK_MS);
-  const pts = correct ? 100 + Math.round(100 * (1 - ms / ASK_MS)) : 0;      // 100 for being right, up to 100 more for being fast
+  const pid = rows[0].id, card = cards[t.idx];
+  const correct = choice === card.ok;
+  const ms = Math.max(0, Math.min(t.askInto, ASK_MS));
+  const base = POINTS[card.d];
+  const pts = correct ? base + Math.round(base * (1 - ms / ASK_MS)) : 0;     // the card's points for being right, up to as much again for being fast
   const ins = await sql`
-    INSERT INTO preshow_answers (player_id, qi, choice, correct, pts, ms) VALUES (${pid}, ${t.qi}, ${choice}, ${correct}, ${pts}, ${ms})
+    INSERT INTO preshow_answers (player_id, qi, choice, correct, pts, ms) VALUES (${pid}, ${t.idx}, ${choice}, ${correct}, ${pts}, ${ms})
     ON CONFLICT (player_id, qi) DO NOTHING RETURNING choice`;
   if (!ins.length) {                                                         // one answer per card: the first tap stands
-    const ex = await sql`SELECT choice FROM preshow_answers WHERE player_id = ${pid} AND qi = ${t.qi}`;
+    const ex = await sql`SELECT choice FROM preshow_answers WHERE player_id = ${pid} AND qi = ${t.idx}`;
     return res.status(200).json({ ok: true, dup: true, pick: ex.length ? ex[0].choice : choice });
   }
   await sql`UPDATE preshow_players SET score = score + ${pts}, correct = correct + ${correct ? 1 : 0}, answered = answered + 1, last_seen = now() WHERE id = ${pid}`;
@@ -305,9 +357,14 @@ async function claim(req, res) {
   await ensureTables();
   const b = body(req), show = showOf(b.show), hash = String(b.hash || '').toLowerCase(), now = Date.now();
   if (show === 'preview' || Number(show) < now || Number(show) > now + 30 * 60000 || !/^[0-9a-f]{64}$/.test(hash)) return res.status(400).json({ error: 'bad request' });
-  await sql`INSERT INTO preshow_admin (show, hash) VALUES (${show}, ${hash}) ON CONFLICT (show) DO NOTHING`;
-  const row = await sql`SELECT hash FROM preshow_admin WHERE show = ${show}`;
-  return res.status(200).json({ ok: row.length > 0 && row[0].hash === hash });
+  // the show's own questions ride along with the claim; a set that does not pass the checks is refused outright,
+  // so a show never half-loads its questions
+  let cards = null;
+  if (b.cards !== undefined) { cards = cleanCards(b.cards); if (!cards) return res.status(400).json({ error: 'The question set is not valid.' }); }
+  await sql`INSERT INTO preshow_admin (show, hash, cards) VALUES (${show}, ${hash}, ${cards ? JSON.stringify(cards) : null}) ON CONFLICT (show) DO NOTHING`;
+  const row = await sql`SELECT hash, cards FROM preshow_admin WHERE show = ${show}`;
+  const mine = row.length > 0 && row[0].hash === hash;
+  return res.status(200).json({ ok: mine, cards: mine && row[0].cards ? JSON.parse(row[0].cards).length : 0 });
 }
 
 /* The show this request may administer: the most recent one claimed for the caller's token. */
@@ -327,7 +384,7 @@ async function admin(req, res) {
     const p = await sql`SELECT 1 FROM preshow_pair WHERE hash = ${who.hash} AND taken_at IS NOT NULL LIMIT 1`;
     return res.status(200).json({ ok: true, paired: p.length > 0, show: null, now: Date.now() });
   }
-  const show = who.show, t = timeline(show, Date.now()), c = QUESTIONS[t.qi];
+  const show = who.show, cards = await cardsOf(show), t = timeline(show, Date.now(), cards.length), c = cards[t.idx];
   const [board, agg, dist, voice] = await Promise.all([
     sql`SELECT id, name, score, correct, answered, (last_seen > now() - interval '45 seconds') AS online
         FROM preshow_players WHERE show = ${show} ORDER BY score DESC, id ASC LIMIT 300`,
@@ -335,16 +392,16 @@ async function admin(req, res) {
                (COUNT(*) FILTER (WHERE last_seen > now() - interval '45 seconds'))::int AS online
         FROM preshow_players WHERE show = ${show}`,
     sql`SELECT a.choice, COUNT(*)::int AS n FROM preshow_answers a JOIN preshow_players p ON p.id = a.player_id
-        WHERE p.show = ${show} AND a.qi = ${t.qi} GROUP BY a.choice`,
+        WHERE p.show = ${show} AND a.qi = ${t.idx} GROUP BY a.choice`,
     sql`SELECT line FROM preshow_voice WHERE show = ${show} ORDER BY created_at DESC LIMIT 1`,
   ]);
   const counts = [0, 0, 0, 0];
   for (const d of dist) if (d.choice >= 0 && d.choice < 4) counts[d.choice] = d.n;
   return res.status(200).json({
-    ok: true, paired: true, show, at: Number(show), ask: ASK_MS, answer: ANSWER_MS, final: FINAL_MS, n: QUESTIONS.length,
-    qi: t.qi, into: t.into, reveal: t.reveal, closed: t.closed,
+    ok: true, paired: true, show, at: Number(show), spin: SPIN_MS, ask: ASK_MS, answer: ANSWER_MS, final: FINAL_MS, n: cards.length,
+    qi: t.idx, into: t.into, intro: t.intro, phase: t.phase, reveal: t.reveal, closed: t.closed,
     players: agg[0].players, online: agg[0].online, answers: agg[0].answers, correct: agg[0].correct,
-    card: { q: c.q, a: c.a, ok: c.ok, counts },
+    card: { q: c.q, a: c.a, ok: c.ok, counts, cat: c.cat, pts: POINTS[c.d], tier: TIERS[c.d] },
     board: board.map(r => ({ id: r.id, name: r.name, score: r.score, correct: r.correct, answered: r.answered, online: !!r.online })),
     voice: voice.length ? voice[0].line.replace(/\s*\[[^\]]*\]\s*/g, ' ').replace(/six oh nine/gi, '609').trim() : '',
     now: Date.now(),
@@ -519,14 +576,14 @@ async function announce(req, res) {
   if (show === 'preview' || Number(show) < now - 60000 || Number(show) > now + 20 * 60000) return res.status(400).json({ error: 'That show is not live.' });
   const kind = ['welcome', 'mid', 'final', 'test'].includes(String(req.query.kind)) ? String(req.query.kind) : 'mid';
   const fixed = kind === 'welcome' ? WELCOME : kind === 'test' ? AUDIO_TEST : null;   // lines that do not depend on the leaderboard
-  const t = timeline(show, now);
+  const t = timeline(show, now, (await cardsOf(show)).length);
   // when the launcher will start playing this line (server time). With it, the captions go live for the screen and phones.
   const play = Number(req.query.play);
   const playAt = Number.isFinite(play) && play > now - 10000 && play < now + 120000 ? Math.round(play) : 0;
   // the welcome and the audio-test line are the same for every show, so each is stored once for all of them; a changed
   // text or voice makes a new row
   const rowShow = fixed ? '*' : show;
-  const slot = fixed ? kind + ':timed:' + VOICE_ID + ':' + VOICE_MODELS[0] + ':' + fixed.length : kind === 'mid' ? 'mid:' + t.s : 'final';
+  const slot = fixed ? kind + ':timed:' + VOICE_ID + ':' + VOICE_MODELS[0] + ':' + fixed.length : kind === 'mid' ? 'mid:' + t.idx : 'final';
   const send = async (line, b64, cues, ms) => {
     cues = cues.replace(/six oh nine/gi, '609');                       // written out for the voice, shown as a number in the captions
     if (playAt) {
@@ -557,7 +614,7 @@ async function announce(req, res) {
     ]);
     leader = top.length && top[0].score > 0 ? top[0].id : null;
     const newLeader = prev.length > 0 && prev[0].leader !== null && leader !== null && prev[0].leader !== leader;
-    line = composeLine(kind, top, cnt[0].n, t.s, newLeader);
+    line = composeLine(kind, top, cnt[0].n, t.idx, newLeader);
   }
 
   let got = null, usedModel = '', problem = { status: 504, detail: 'no answer' };

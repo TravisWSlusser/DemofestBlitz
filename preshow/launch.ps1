@@ -19,6 +19,8 @@ param(
   [string]$Bg     = '000000',                   # unused by the current page (it fades to the deck background); kept for other decks
   [string]$Music  = '',                         # folder of background music; empty = the "music" folder next to this script
   [double]$MusicVolume = 0.5,                   # 0 to 1, on top of the laptop's own volume
+  [string]$Set    = '10',                       # which question set plays: a name from "sets" in the question file (10, 15, test)
+  [string]$Questions = '',                      # the question file; empty = questions.json next to this script
   [switch]$NoVoice,                             # turn the announcer off
   [switch]$NoMenu,                              # skip the start screen and launch straight away
   [double]$VoiceVolume = 1.0,                   # 0 to 1
@@ -186,9 +188,30 @@ try {
   if (-not (Test-Path -LiteralPath $Deck)) { throw "Deck not found: $Deck" }
   $Deck = (Resolve-Path -LiteralPath $Deck).Path
 
+  # ---- the questions. They live in a file on this laptop (questions.json next to this script; it is not in the public
+  # repo) and are handed to the server when this show is claimed, a few lines further down. -Set says which ordered
+  # list of them plays. A file that is there but cannot be used stops the launch: better than the wrong questions.
+  $cards = @(); $qFile = if ($Questions) { $Questions } else { Join-Path $PSScriptRoot 'questions.json' }
+  if (Test-Path -LiteralPath $qFile) {
+    try {
+      $bank = Get-Content -LiteralPath $qFile -Raw -Encoding UTF8 | ConvertFrom-Json
+      $byId = @{}; foreach ($q in $bank.bank) { $byId["$($q.id)"] = $q }
+      $ids = @($bank.sets.$Set)
+      if (-not $ids.Count -or -not $ids[0]) { throw "there is no set called '$Set'" }
+      foreach ($id in $ids) {
+        $q = $byId["$id"]; if (-not $q) { throw "set '$Set' lists '$id', which is not in the bank" }
+        $c = $bank.categories."$($q.cat)"
+        $cards += @{ q = "$($q.q)"; a = @($q.a | ForEach-Object { "$_" }); ok = [int]$q.ok; d = [int]$q.d; fact = "$($q.fact)"; kind = "$($q.kind)"
+                     cat = $(if ($c) { "$($c.name)" } else { "$($q.cat)" }); short = $(if ($c) { "$($c.short)" } else { "$($q.cat)" }) }
+      }
+    } catch { throw "The question file could not be used ($qFile): $($_.Exception.Message)" }
+    Say "Questions: set '$Set', $($cards.Count) rounds."
+  } else { Say "No question file at $qFile. The built-in sample questions will play." }
+
   # ---- the start screen: AUDIO TEST or LAUNCH PRE SHOW. Nothing else happens until LAUNCH is pressed.
   $relative = $ShowAt -match '^\+(\d+(\.\d+)?)$'
   $whenText = if ($relative) { "$($Matches[1]) minutes after you press launch" } else { 'at ' + (Get-Date $ShowAt).ToString('h:mm tt') + " on this laptop's clock" }
+  if ($cards.Count) { $whenText += "  ·  $($cards.Count) questions" }
   if (-not $relative -and (Get-Date $ShowAt) -lt (Get-Date).AddSeconds(20)) { throw "Show time $((Get-Date $ShowAt).ToString('HH:mm:ss')) is already here or past. Set SHOWAT to a later time." }
   if (-not $NoMenu) {
     $menuDir = if ($Music) { $Music } else { Join-Path $PSScriptRoot 'music' }
@@ -205,19 +228,20 @@ try {
   Say "Show starts at $($target.ToString('HH:mm:ss')). Deck: $Deck"
 
   # ---- the game server's clock. The big screen and the phones count down on it, so this script does too:
+  # (asked of the preview show, so that nothing has looked up this show before it is claimed, just below)
   # otherwise a laptop clock that is a few seconds off would cut to the deck early or late.
   [Net.ServicePointManager]::SecurityProtocol = [Net.ServicePointManager]::SecurityProtocol -bor [Net.SecurityProtocolType]::Tls12
   $site = ([uri]$Url).GetLeftPart([UriPartial]::Authority)
-  $script:srvOffsetMs = 0.0; $ASK = 18.0; $ANS = 8.0; $FIN = 20.0; $bestRtt = [double]::MaxValue
+  $script:srvOffsetMs = 0.0; $SPIN = 6.0; $ASK = 17.0; $ANS = 8.0; $FIN = 20.0; $sampleN = 6; $bestRtt = [double]::MaxValue
   for ($i = 0; $i -lt 3; $i++) {
     try {
-      $t0 = Get-Date; $st = Invoke-RestMethod -Uri "$site/api/preshow/state?show=$atMs" -TimeoutSec 8; $t1 = Get-Date
+      $t0 = Get-Date; $st = Invoke-RestMethod -Uri "$site/api/preshow/state?show=preview" -TimeoutSec 8; $t1 = Get-Date
       $rtt = ($t1 - $t0).TotalMilliseconds
       if ($rtt -lt $bestRtt) {                                     # the quickest round trip is the best clock sample
         $bestRtt = $rtt
         $srv = [DateTimeOffset]::FromUnixTimeMilliseconds([long]$st.now).LocalDateTime
         $script:srvOffsetMs = ($srv - $t1).TotalMilliseconds + $rtt / 2
-        $ASK = $st.ask / 1000; $ANS = $st.answer / 1000; $FIN = $st.final / 1000
+        $SPIN = $st.spin / 1000; $ASK = $st.ask / 1000; $ANS = $st.answer / 1000; $FIN = $st.final / 1000; $sampleN = [int]$st.n
       }
     } catch { if ($i -eq 2 -and $bestRtt -eq [double]::MaxValue) { Say "Could not reach the game server: $($_.Exception.Message)" } }
   }
@@ -232,9 +256,17 @@ try {
   $phone = $adminHash -match '^[0-9a-f]{64}$'
   if (-not $phone) { $rb = New-Object byte[] 32; [System.Security.Cryptography.RandomNumberGenerator]::Create().GetBytes($rb); $adminHash = -join ($rb | ForEach-Object { $_.ToString('x2') }) }
   try {
-    $cr = Invoke-RestMethod -Method Post -Uri "$site/api/preshow/claim" -ContentType 'application/json' -Body (@{ show = "$atMs"; hash = $adminHash } | ConvertTo-Json -Compress) -TimeoutSec 8
+    $claim = @{ show = "$atMs"; hash = $adminHash }
+    if ($cards.Count) { $claim.cards = $cards }                     # this show's questions go to the server with the claim
+    $claimJson = [Text.Encoding]::UTF8.GetBytes(($claim | ConvertTo-Json -Depth 6 -Compress))
+    $cr = Invoke-RestMethod -Method Post -Uri "$site/api/preshow/claim" -ContentType 'application/json; charset=utf-8' -Body $claimJson -TimeoutSec 12
     if ($cr.ok -and $phone) { Say 'The paired admin phone now controls this show.' } elseif ($cr.ok) { Say 'No admin phone is paired. The show is closed to outside control.' } else { Say 'This show had already been claimed by another device.' }
-  } catch { Say "Could not register the admin phone: $($_.Exception.Message)" }
+    if ($cards.Count -and [int]$cr.cards -ne $cards.Count) { throw "the server holds $([int]$cr.cards) of this show's $($cards.Count) questions" }
+    if ($cards.Count) { Say "The server has this show's $($cards.Count) questions." }
+  } catch {
+    if ($cards.Count) { throw "The questions could not be handed to the game server, so the pre-show was not started. ($($_.Exception.Message))" }
+    Say "Could not register the admin phone: $($_.Exception.Message)"
+  }
 
   Add-Type @"
 using System; using System.Runtime.InteropServices;
@@ -360,8 +392,8 @@ public static class PreShowWin {
 
   # ---- the announcer: an ElevenLabs voice. The server writes each line from the live leaderboard and returns the audio;
   # this script only asks for it on a schedule and plays it, dipping the music underneath. Schedule, in server time:
-  # a welcome just after the start, a standings update at an answer reveal roughly every two minutes (every fifth
-  # card), and the winner over the closing countdown. Each request says when the line will start playing, so the
+  # a welcome just after the start, a standings update at an answer reveal roughly every two minutes (every fourth
+  # round), and the winner over the closing countdown. Each request says when the line will start playing, so the
   # server can put its captions on the big screen and the phones at that moment.
   # Each line is requested several seconds early because the
   # expressive voice model takes a moment; one that fails or arrives too late is simply skipped.
@@ -372,9 +404,9 @@ public static class PreShowWin {
     catch { Say "Voice unavailable: $($_.Exception.Message)" }
   }
   if ($vp) {
-    $s0 = SNow; $CYC = $ASK + $ANS
+    $s0 = SNow; $CYC = $SPIN + $ASK + $ANS; $N = if ($cards.Count) { $cards.Count } else { $sampleN }
     if (($target - $s0).TotalSeconds -gt 70) { [void]$plan.Add(@{ kind = 'welcome'; fetch = $s0.AddSeconds(1); play = $s0.AddSeconds(5); late = 8 }) }
-    for ($j = 2; $j -lt 200; $j += 5) {
+    for ($j = 2; $j -lt $N; $j += 4) {                               # counting rounds back from the last one
       $rev = $target.AddSeconds(-($FIN + $ANS + $j * $CYC))        # the moment card j-from-the-end shows its answer
       if ($rev -lt $s0.AddSeconds(30)) { break }
       [void]$plan.Add(@{ kind = 'mid'; fetch = $rev.AddSeconds(-9); play = $rev.AddSeconds(0.7); late = 6 })

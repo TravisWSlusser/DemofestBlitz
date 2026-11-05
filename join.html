@@ -23,6 +23,7 @@
   .view { display: none; flex: 1; flex-direction: column; }
   .view.on { display: flex; }
   .k { font-weight: 500; font-size: .85rem; color: var(--green); letter-spacing: .04em; }
+  .k b { color: #fff; font-weight: 500; }
   h1 { font-stretch: 75%; font-weight: 900; font-size: 2.3rem; line-height: 1.02; margin: 10px 0 14px; }
   p { font-weight: 300; font-size: 1.05rem; line-height: 1.35; color: var(--soft); margin: 0 0 22px; text-transform: none; }
 
@@ -58,12 +59,20 @@
   .status { min-height: 3.2em; margin-top: 14px; font-weight: 500; font-size: 1rem; color: var(--soft); }
   .status b { color: var(--green); font-stretch: 75%; font-weight: 900; font-size: 1.5rem; display: block; }
 
+  /* between questions: before the first spin, and while the wheel turns on the big screen */
+  .wait { display: none; margin-top: auto; padding: 18px 0 3.2em; }
+  .wait .big { font-stretch: 75%; font-weight: 900; font-size: 2.6rem; line-height: 1; margin: 10px 0 12px; }
+  .wait .worth { font-stretch: 75%; font-weight: 900; font-size: 1.7rem; color: var(--green); }
+  .wait .sub { font-weight: 300; font-size: 1.05rem; line-height: 1.35; color: var(--soft); margin-top: 10px; text-transform: none; }
+  #play.waiting .wait { display: block; }
+  #play.waiting .qwrap { display: none; }
+
   /* captions: what the announcer is saying, for anyone who cannot hear the room */
   .capbox { margin-top: 14px; min-height: 4.6em; padding: 10px 14px; border-left: 4px solid var(--green); background: rgba(255,255,255,.07); opacity: 0; transition: opacity .3s; }
   .capbox .who { font-weight: 500; font-size: .75rem; color: var(--green); letter-spacing: .06em; margin-bottom: 4px; }
   .capbox .say { font-weight: 500; font-size: 1.15rem; line-height: 1.2; }
   body.cap-on .capbox { opacity: 1; }
-  #join.on ~ .capbox, body:has(#join.on) .capbox { display: none; }
+  body:has(#join.on) .capbox { display: none; }
 
   /* done */
   #done { justify-content: center; }
@@ -72,14 +81,14 @@
 </head>
 <body>
   <div class="wrap">
-    <header><span class="h1">00. Pre-Show</span><span class="h2">Cinema Trivia</span></header>
+    <header><span class="h1">00. Pre-Show</span><span class="h2">The Trivia Wheel</span></header>
 
     <div class="capbox" aria-live="polite"><div class="who">Announcer</div><div class="say" id="capText"></div></div>
 
     <section class="view" id="join">
       <div class="k">DevLearn 2026 │ Session 609</div>
       <h1>Play along</h1>
-      <p>Your name goes on the big screen. Answer on your phone. Right answers score, and faster answers score more.</p>
+      <p>Your name goes on the big screen. A wheel picks each round and what it is worth. Answer on your phone: right answers score, faster answers score more, and deep cuts are worth the most.</p>
       <form id="form" autocomplete="off">
         <input id="name" name="pn" type="text" maxlength="18" placeholder="Your name" autocomplete="off" autocapitalize="words" spellcheck="false" enterkeyhint="go" required>
         <button class="go" id="go" type="submit">Join the game</button>
@@ -89,6 +98,12 @@
 
     <section class="view" id="play">
       <div class="me"><span class="nm" id="meName"></span><span class="sc" id="meScore"></span></div>
+      <div class="wait">
+        <div class="k" id="waitK"></div>
+        <div class="big" id="waitBig"></div>
+        <div class="worth" id="waitWorth"></div>
+        <div class="sub" id="waitSub"></div>
+      </div>
       <div class="qwrap">
         <div class="k" id="num"></div>
         <div class="q" id="q"></div>
@@ -118,7 +133,7 @@
   const pad = n => String(n).padStart(2, '0');
   const LETTERS = ['A', 'B', 'C', 'D'];
 
-  let T = { ask: 18000, answer: 8000, final: 20000 };
+  let T = { spin: 6000, ask: 17000, answer: 8000, final: 20000 };
   let cards = [], reveals = {}, offset = 0, synced = false;
   let me = null;                       // { token, name }
   let stat = null;                     // my latest numbers from the server
@@ -145,11 +160,19 @@
     document.body.classList.toggle('cap-on', !!text);
   }
 
+  /* Where the show is. The same sums as timeline() in api/preshow.js: each card is one cycle (wheel, question, answer);
+     the cards run in order and the last ends when the closing countdown begins; before card 1 is the intro. */
   function timeline(now){
-    const cycle = T.ask + T.answer;
-    const anchor = at ? (at - T.final) % cycle : 0;
-    const s = Math.floor((now - anchor) / cycle), into = now - anchor - s * cycle, n = cards.length || 1;
-    return { s, into, qi: ((s % n) + n) % n, reveal: into >= T.ask, closed: at ? now >= at - T.final : false };
+    const n = cards.length || 1, cycle = T.spin + T.ask + T.answer;
+    let qi = 0, into = 0, intro = 0, closed = false, s = -1;
+    if (!at) { s = Math.floor(now / cycle); qi = s % n; into = now - s * cycle; }
+    else {
+      const el = now - (at - T.final - n * cycle);
+      closed = now >= at - T.final;
+      if (el < 0) intro = -el; else { qi = Math.min(n - 1, Math.floor(el / cycle)); into = el - qi * cycle; s = qi; }
+    }
+    const phase = closed ? 'closed' : intro ? 'intro' : into < T.spin ? 'spin' : into < T.spin + T.ask ? 'ask' : 'answer';
+    return { s, qi, into, askInto: into - T.spin, intro, phase, reveal: phase === 'answer', closed };
   }
 
   async function pull(){
@@ -159,11 +182,11 @@
       if (!r.ok) throw new Error('state ' + r.status);
       const d = await r.json(), t1 = Date.now(), rtt = t1 - t0;
       if (!synced || rtt < 800) { offset = d.now + rtt / 2 - t1; synced = true; }
-      T = { ask: d.ask, answer: d.answer, final: d.final };
+      T = { spin: d.spin, ask: d.ask, answer: d.answer, final: d.final };
       if (d.cards) cards = d.cards;
       if (d.reveal) reveals[d.reveal.qi] = d.reveal;
       if (d.cue) cue = d.cue;
-      if (me && d.me === null) { me = null; stat = null; try { localStorage.removeItem(KEY); } catch (_) {} }   // the board was cleared: join again
+      if (me && d.me === null) { me = null; stat = null; try { localStorage.removeItem(KEY); } catch (_) {} }   // removed, or the board was cleared: join again
       if (d.me) { stat = d.me; stat.players = d.players; stat.qi = d.qi; if (d.me.pick !== null && d.qi === timeline(srvNow()).qi && pick === null) pick = d.me.pick; }
       return d;
     } catch (_) { return null; }
@@ -177,8 +200,7 @@
 
   function tap(n){
     if (pick !== null) return;
-    const tl = timeline(srvNow());
-    if (tl.reveal || tl.closed) return;
+    if (timeline(srvNow()).phase !== 'ask') return;
     pick = n; draw(true);
     fetch(API + 'answer', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Player-Token': me.token }, body: JSON.stringify({ show, choice: n }) })
       .then(r => r.json()).then(d => {
@@ -190,25 +212,45 @@
 
   function draw(force){
     const tl = timeline(srvNow());
+    const c = cards[tl.qi];
+    const landed = tl.phase !== 'spin' || tl.into >= T.spin * 0.72;       // the wheel on the big screen has stopped
+    const waiting = tl.phase === 'intro' || tl.phase === 'spin';
     const rev = tl.reveal ? reveals[tl.qi] : null;
     if (tl.s !== slot) { slot = tl.s; pick = null; late = false; revealAsk = 0; revealDelay = 150 + Math.random() * 900; drawn = ''; }
-    const key = tl.s + ':' + (tl.reveal ? (rev ? 'a' : 'w') : 'q') + ':' + pick + ':' + late + ':' + (stat ? stat.score + '/' + stat.pts : '');
+    const introSecs = Math.ceil(tl.intro / 1000);
+    const key = tl.s + ':' + tl.phase + ':' + landed + ':' + (rev ? 'a' : '') + ':' + pick + ':' + late + ':' + (stat ? stat.score + '/' + stat.pts : '') + ':' + (tl.phase === 'intro' ? introSecs : '');
     if (!force && key === drawn) return; drawn = key;
-    const c = cards[tl.qi];
-    $('num').textContent = 'Question ' + pad(tl.qi + 1) + ' of ' + pad(cards.length);
+    $('play').classList.toggle('waiting', waiting);
+    drawMe();
+    if (tl.phase === 'intro') {
+      $('waitK').textContent = 'You are in';
+      $('waitBig').textContent = 'First spin in ' + Math.floor(introSecs / 60) + ':' + pad(introSecs % 60);
+      $('waitWorth').textContent = '';
+      $('waitSub').textContent = 'Watch the big screen. A wheel picks each round and what it is worth. Your answers go here.';
+      return;
+    }
+    if (tl.phase === 'spin') {
+      $('waitK').textContent = 'Round ' + pad(tl.qi + 1) + ' of ' + pad(cards.length);
+      $('waitBig').textContent = landed ? c.cat : 'The wheel is spinning…';
+      $('waitWorth').textContent = landed ? c.pts + ' points · ' + c.tier : '';
+      $('waitSub').textContent = landed ? 'Get ready. The question opens in a moment.' : 'Watch the big screen.';
+      return;
+    }
+    const num = $('num'); num.textContent = 'Round ' + pad(tl.qi + 1) + ' of ' + pad(cards.length) + ' │ ';
+    const b = document.createElement('b'); b.textContent = c.cat; num.append(b, ' │ ' + c.pts + ' pts');
     $('q').textContent = c.q;
     const box = $('opts');
     if (box.dataset.slot !== String(tl.s)) {
       box.dataset.slot = String(tl.s); box.textContent = '';
       c.a.forEach((t, n) => {
-        const b = document.createElement('button'); b.type = 'button'; b.className = 'opt';
+        const btn = document.createElement('button'); btn.type = 'button'; btn.className = 'opt';
         const l = document.createElement('span'); l.className = 'l'; l.textContent = LETTERS[n];
         const s = document.createElement('span'); s.textContent = t;
-        b.append(l, s); b.addEventListener('click', () => tap(n)); box.append(b);
+        btn.append(l, s); btn.addEventListener('click', () => tap(n)); box.append(btn);
       });
     }
-    const open = !tl.reveal && pick === null;
-    [...box.children].forEach((b, n) => { b.disabled = !open; b.classList.toggle('pick', n === pick); b.classList.toggle('ok', !!rev && n === rev.ok); });
+    const open = tl.phase === 'ask' && pick === null;
+    [...box.children].forEach((btn, n) => { btn.disabled = !open; btn.classList.toggle('pick', n === pick); btn.classList.toggle('ok', !!rev && n === rev.ok); });
     box.classList.toggle('locked', pick !== null && !rev);
     box.classList.toggle('shown', !!rev);
     const st = $('status');
@@ -217,13 +259,12 @@
       else if (late) st.textContent = 'Just too late.';
       else if (pick === rev.ok) {
         st.textContent = '';
-        if (stat && stat.qi === tl.qi && stat.right && stat.pts) { const b = document.createElement('b'); b.textContent = '+' + stat.pts + ' points'; st.append(b); }
+        if (stat && stat.qi === tl.qi && stat.right && stat.pts) { const p = document.createElement('b'); p.textContent = '+' + stat.pts + ' points'; st.append(p); }
         st.append('Right answer.');
       }
       else st.textContent = 'Not this one.';
     } else if (tl.reveal) st.textContent = pick === null ? 'Time is up.' : 'Locked in.';
     else st.textContent = pick === null ? 'Tap your answer. Faster scores more.' : 'Locked in. Watch the big screen.';
-    drawMe();
   }
 
   function tick(){
@@ -236,11 +277,11 @@
       drawDone(); view('done'); return;
     }
     view('play'); draw(false);
-    $('bar').style.transform = 'scaleX(' + (tl.reveal ? 0 : 1 - tl.into / T.ask) + ')';
+    $('bar').style.transform = 'scaleX(' + (tl.phase === 'ask' ? Math.max(0, 1 - tl.askInto / T.ask) : 0) + ')';
     // at the reveal, ask once for the answer and my points (each phone waits a random beat so they do not all hit at once)
     // (once per card in any case: the same call brings the announcer's captions)
     const needs = tl.reveal && (pulledSlot !== tl.s || !reveals[tl.qi] || (pick !== null && !late && !(stat && stat.qi === tl.qi && stat.pts !== undefined)));
-    if (needs && tl.into - T.ask > revealDelay && Date.now() - revealAsk > 1500) { revealAsk = Date.now(); pulledSlot = tl.s; pull().then(() => draw(true)); }
+    if (needs && tl.askInto - T.ask > revealDelay && Date.now() - revealAsk > 1500) { revealAsk = Date.now(); pulledSlot = tl.s; pull().then(() => draw(true)); }
   }
 
   function drawDone(){

@@ -164,7 +164,7 @@
     $('tAnsS').textContent = d.online ? Math.round(100 * answered / Math.max(1, d.online)) + '% of those connected' : '';
     $('tAcc').textContent = d.answers ? Math.round(100 * d.correct / d.answers) + '%' : '–';
     $('tAccS').textContent = d.answers ? d.correct + ' of ' + d.answers + ' answers' : 'no answers yet';
-    $('cNum').textContent = 'Question ' + pad(d.qi + 1) + ' of ' + pad(d.n);
+    $('cNum').textContent = 'Round ' + pad(d.qi + 1) + ' of ' + pad(d.n) + ' │ ' + d.card.cat + ' │ ' + d.card.pts + ' pts';
     $('cQ').textContent = d.card.q;
     const box = $('cOpts'); box.textContent = '';
     const most = Math.max(1, ...d.card.counts);
@@ -207,9 +207,12 @@
       const now = Date.now() + offset, left = d.at - now, secs = Math.max(0, Math.ceil(left / 1000));
       $('tClock').textContent = left > 0 ? pad(Math.floor(secs / 60)) + ':' + pad(secs % 60) : 'LIVE';
       $('tClockK').textContent = left > 0 ? 'Show starts in' : 'Your deck is up';
-      const cycle = d.ask + d.answer, anchor = (d.at - d.final) % cycle, into = now - anchor - Math.floor((now - anchor) / cycle) * cycle;
-      const closed = now >= d.at - d.final;
-      const state = left <= 0 ? 'The pre-show has ended' : closed ? 'Closing countdown' : into < d.ask ? 'Open for answers, ' + Math.ceil((d.ask - into) / 1000) + ' s left' : 'Answer is showing';
+      // the server says where the round was when it answered; count on from there until the next update
+      const since = now - d.now, into = d.into + since, closed = now >= d.at - d.final;
+      const state = left <= 0 ? 'The pre-show has ended' : closed ? 'Closing countdown'
+        : d.phase === 'intro' && d.intro - since > 0 ? 'First spin in ' + Math.ceil((d.intro - since) / 1000) + ' s'
+        : into < d.spin ? 'The wheel is spinning' : into < d.spin + d.ask ? 'Open for answers, ' + Math.ceil((d.spin + d.ask - into) / 1000) + ' s left'
+        : into < d.spin + d.ask + d.answer ? 'Answer is showing' : 'Next round';
       $('tPhase').textContent = state; $('cState').textContent = state;
     }
     const age = lastOk ? Math.round((Date.now() - lastOk) / 1000) : null;

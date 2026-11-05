@@ -12,7 +12,8 @@
   /* The big screen for the DevLearn Session 609 pre-show. It is dressed as a slide from the deck, not as the Demofest
      booth: the deck's background image, Encode Sans SC (condensed black for headings, medium/regular/light for the
      rest), white text with the deck's green accent, the card anchored bottom-left like the title slide.
-     The stage is a 16:9 box, letterboxed exactly like PowerPoint's slideshow, so the hand-over to slide 1 lines up. */
+     The stage is a 16:9 box, letterboxed exactly like PowerPoint's slideshow, so the hand-over to slide 1 lines up.
+     What is on the left depends on the phase (body[data-ph]): intro, spin, ask, answer, closed. */
   :root { --green: #00B050; --white: #FFFFFF; --soft: rgba(255,255,255,.72); --line: rgba(255,255,255,.10); }
   * { box-sizing: border-box; }
   html, body { margin: 0; height: 100%; background: #000; overflow: hidden; cursor: none; }
@@ -31,9 +32,46 @@
   .clock .k { font-weight: 500; font-size: 1.3cqw; color: var(--green); letter-spacing: .04em; }
   .clock .t { font-stretch: 75%; font-weight: 900; font-size: 2.1cqw; font-variant-numeric: tabular-nums; }
 
+  .intro, .spin, .card, .bar, .final { display: none; }
+  @keyframes rise { from { opacity: 0; transform: translateY(1.6cqh); } to { opacity: 1; transform: none; } }
+
+  /* intro: before the first spin. A big code to scan and how to play. */
+  body[data-ph="intro"] .intro { display: grid; animation: rise .7s ease both; }
+  .intro { position: absolute; left: 3.9cqw; bottom: 13.2cqh; grid-template-columns: 21cqw 1fr; gap: 2.6cqw; align-items: end; width: 64cqw; }
+  .intro .qr { padding: 1cqw; }
+  .intro .k { font-weight: 500; font-size: 1.46cqw; color: var(--green); letter-spacing: .04em; }
+  .intro h2 { font-stretch: 75%; font-weight: 900; font-size: 6.2cqw; line-height: .92; margin: 1cqh 0 2.4cqh; }
+  .intro ol { list-style: none; margin: 0 0 3cqh; padding: 0; display: grid; gap: 1.1cqh; font-weight: 400; font-size: 2cqw; line-height: 1.15; }
+  .intro ol b { font-stretch: 75%; font-weight: 900; color: var(--green); margin-right: 1cqw; }
+  .intro .go { font-weight: 300; font-size: 1.9cqw; color: var(--soft); }
+  .intro .go b { font-stretch: 75%; font-weight: 900; color: #fff; font-size: 2.6cqw; font-variant-numeric: tabular-nums; margin-left: .8cqw; }
+
+  /* spin: the wheel picks the round's category, then shows what it is worth */
+  body[data-ph="spin"] .spin { display: block; }
+  .spin { position: absolute; left: 3.9cqw; top: 18cqh; bottom: 14cqh; width: 66cqw; }
+  .wheelbox { position: absolute; left: 0; top: 50%; transform: translateY(-50%); height: 100%; aspect-ratio: 1; }
+  .wheel { width: 100%; height: 100%; display: block; transform-origin: 50% 50%; will-change: transform; }
+  .wheel path { stroke: rgba(0,176,80,.55); stroke-width: .5; transition: fill .3s; }
+  .wheel text { font-family: 'Encode Sans SC', sans-serif; font-stretch: 75%; font-weight: 900; fill: #fff; letter-spacing: .01em; transition: fill .3s; }
+  .wheel .win path { fill: var(--green); } .wheel .win text { fill: #04130a; }
+  .pointer { position: absolute; right: -2.2cqw; top: 50%; width: 0; height: 0; transform: translateY(-50%);
+    border-style: solid; border-width: 1.4cqw 3.2cqw 1.4cqw 0; border-color: transparent #fff transparent transparent; filter: drop-shadow(0 0 .6cqw rgba(0,0,0,.6)); }
+  .result { position: absolute; left: calc(68cqh + 6cqw); right: 0; top: 50%; transform: translateY(-50%); }   /* the wheel is 68cqh across */
+  .result .k { font-weight: 500; font-size: 1.46cqw; color: var(--green); letter-spacing: .04em; }
+  .result .wait { font-weight: 300; font-size: 2.2cqw; color: var(--soft); margin-top: 1.2cqh; }
+  .result .cat { font-stretch: 75%; font-weight: 900; font-size: 4.4cqw; line-height: 1; margin: 1.2cqh 0 2cqh; text-wrap: balance; display: none; }
+  .result .worth { display: none; align-items: baseline; gap: 1.2cqw; }
+  .result .pts { font-stretch: 75%; font-weight: 900; font-size: 3.4cqw; color: var(--green); }
+  .result .tier { font-weight: 300; font-size: 1.9cqw; color: var(--soft); }
+  .spin.landed .wait { display: none; }
+  .spin.landed .cat { display: block; animation: rise .45s ease both; }
+  .spin.landed .worth { display: flex; animation: rise .45s .12s ease both; }
+
   /* the card: bottom-left, like the title slide */
+  body[data-ph="ask"] .card, body[data-ph="answer"] .card { display: block; }
   .card { position: absolute; left: 3.9cqw; right: 31cqw; bottom: 13.2cqh; }
   .card .num { font-weight: 500; font-size: 1.46cqw; color: var(--green); letter-spacing: .04em; margin-bottom: 1.4cqh; }
+  .card .num b { color: #fff; font-weight: 500; }
   .card .q { font-stretch: 75%; font-weight: 900; font-size: 3.4cqw; line-height: 1.08; letter-spacing: -.005em; margin: 0 0 3.2cqh; text-wrap: balance; }
   .answers { list-style: none; margin: 0; padding: 0; display: grid; gap: 1.4cqh; }
   .answers li { display: grid; grid-template-columns: 2.6cqw 1fr; align-items: baseline; font-weight: 400; font-size: 2.1cqw; line-height: 1.15;
@@ -46,9 +84,9 @@
   .fact { font-weight: 300; font-size: 1.7cqw; line-height: 1.3; color: var(--soft); text-transform: none; }
   .stat { font-weight: 500; font-size: 1.3cqw; color: var(--green); letter-spacing: .04em; margin-top: 1cqh; }
   .card.swap { animation: rise .7s ease both; }
-  @keyframes rise { from { opacity: 0; transform: translateY(1.6cqh); } to { opacity: 1; transform: none; } }
 
   /* timer: a thin green line that runs out while the card is open */
+  body[data-ph="ask"] .bar, body[data-ph="answer"] .bar { display: block; }
   .bar { position: absolute; left: 3.9cqw; right: 31cqw; bottom: 9.6cqh; height: .22cqw; background: var(--line); }
   .bar i { display: block; height: 100%; width: 100%; background: var(--green); transform-origin: left center; }
   .foot { position: absolute; left: 3.9cqw; bottom: 4.9cqh; font-weight: 500; font-size: 1.46cqw; color: var(--green); letter-spacing: .01em; white-space: nowrap; transition: opacity .3s; }
@@ -82,6 +120,8 @@
   .board li.bump { animation: bump .9s ease; }
   @keyframes bump { 0% { background: rgba(0,176,80,.28); } 100% { background: transparent; } }
   .board .empty { font-weight: 300; font-size: 1.3cqw; color: var(--soft); padding-top: 1.6cqh; }
+  body[data-ph="intro"] .joinbox, body[data-ph="closed"] .joinbox { display: none; }     /* the intro has its own big code */
+  body[data-ph="intro"] .board, body[data-ph="closed"] .board { margin-top: 0; }
 
   /* holding X stops the pre-show (the launcher does the stopping; this only shows the hold being counted) */
   .exit { position: absolute; left: 50%; top: 5cqh; transform: translateX(-50%); padding: 1cqh 1.6cqw 1.3cqh; background: rgba(0,0,0,.72); border: 1px solid var(--line); font-weight: 500; font-size: 1.3cqw; letter-spacing: .04em; display: none; }
@@ -90,20 +130,43 @@
   body.exiting .exit i { transform: scaleX(1); transition: transform 1.5s linear; }
 
   /* the closing card: the last seconds before the talk */
-  .final { position: absolute; left: 3.9cqw; bottom: 13.2cqh; display: none; }
+  body[data-ph="closed"] .final { display: block; animation: rise .7s ease both; }
+  body[data-ph="closed"] .clock { display: none; }
+  .final { position: absolute; left: 3.9cqw; bottom: 13.2cqh; }
   .final .k { font-weight: 500; font-size: 1.95cqw; color: var(--green); margin-bottom: 1cqh; }
   .final .big { font-stretch: 75%; font-weight: 900; font-size: 13cqw; line-height: .9; font-variant-numeric: tabular-nums; letter-spacing: -.02em; }
   .final .s { font-weight: 300; font-size: 2.1cqw; color: var(--soft); margin-top: 2cqh; }
-  body.final-on .card, body.final-on .bar, body.final-on .clock, body.final-on .joinbox { display: none; }
-  body.final-on .final { display: block; animation: rise .7s ease both; }
-  body.final-on .board { margin-top: 0; }
 </style>
 </head>
-<body>
+<body data-ph="load">
   <div class="stage">
     <div class="layer">
-      <div class="head"><span class="h1">00. Pre-Show</span><span class="h2">Cinema Trivia</span></div>
+      <div class="head"><span class="h1">00. Pre-Show</span><span class="h2">The Trivia Wheel</span></div>
       <div class="clock" id="clock" hidden><span class="k">Show starts in</span><span class="t" id="left">--:--</span></div>
+
+      <div class="intro">
+        <div class="qr" id="qrBig"></div>
+        <div>
+          <div class="k">DevLearn 2026 │ Session 609</div>
+          <h2>Play along</h2>
+          <ol>
+            <li><b>1</b>Scan the code with your phone</li>
+            <li><b>2</b>Add your name</li>
+            <li><b>3</b>Answer fast. Deep cuts score more</li>
+          </ol>
+          <div class="go" id="introGo">First spin in<b id="introLeft">0:00</b></div>
+        </div>
+      </div>
+
+      <div class="spin" id="spin">
+        <div class="wheelbox"><svg class="wheel" id="wheel" viewBox="-102 -102 204 204" aria-hidden="true"></svg><div class="pointer"></div></div>
+        <div class="result">
+          <div class="k" id="spinNum"></div>
+          <div class="wait">Spinning…</div>
+          <div class="cat" id="spinCat"></div>
+          <div class="worth"><span class="pts" id="spinPts"></span><span class="tier" id="spinTier"></span></div>
+        </div>
+      </div>
 
       <div class="card" id="card">
         <div class="num" id="num"></div>
@@ -141,7 +204,7 @@
   <script>
   'use strict';
   /* Everything runs on the server's clock (see api/preshow.js): the page asks for the state every few seconds,
-     measures how far its own clock is off, and works out which card is up from that. Phones do the same, so the
+     measures how far its own clock is off, and works out where the show is from that. Phones do the same, so the
      screen and the phones flip together. ?at=<epoch ms> is show time, passed by the launcher; it is also the show id,
      so every run gets its own empty leaderboard. Without it the page runs as an endless preview. */
   const API = '/api/preshow/';
@@ -154,7 +217,7 @@
   const pad = n => String(n).padStart(2, '0');
   const LETTERS = ['A', 'B', 'C', 'D'];
 
-  let T = { ask: 18000, answer: 8000, final: 20000 };
+  let T = { spin: 6000, ask: 17000, answer: 8000, final: 20000 };
   let cards = [], reveals = {}, offset = 0, synced = false, shown = '', boardKey = '', lastAsk = 0, scores = {};
   let lastPlayers = -1, lastJoinSfx = 0, lastTick = '';
   const srvNow = () => Date.now() + offset;
@@ -162,8 +225,8 @@
   /* Sound effects: short synthesized tones, so there are no audio files to load. The launcher starts Chrome with
      autoplay allowed; in an ordinary browser tab the first click or key press switches the sound on.
      ?sfx=0 turns them off, and the M key toggles them while the page has focus.
-     Music is not played here: the launcher plays it from the laptop. */
-  let sfxOn = new URLSearchParams(location.search).get('sfx') !== '0';
+     Music and the announcer are not played here: the launcher plays them from the laptop. */
+  let sfxOn = qs0.get('sfx') !== '0';
   let ac = null, bus = null;
   function audio(){
     if (!sfxOn) return null;
@@ -182,7 +245,9 @@
     o.connect(g); g.connect(bus); o.start(t); o.stop(t + dur + 0.05);
   }
   const sfx = {
-    card(){ if (audio()) { tone(392, 0, .22, 'triangle', .7); tone(587.33, .11, .34, 'triangle', .8); } },             // a new question arrives
+    // the wheel: clicks that start fast and slow down, ending as it stops (secs = how long it turns)
+    spin(secs){ if (!audio()) return; let t = 0, gap = .055; while (t < secs - .05) { tone(980, t, .035, 'triangle', .22); gap *= 1.11; t += gap; } },
+    land(){ if (audio()) { tone(392, 0, .22, 'triangle', .7); tone(587.33, .11, .34, 'triangle', .8); } },             // the wheel stops on a category
     tick(){ if (audio()) tone(1320, 0, .06, 'sine', .35); },                                                             // the last seconds of a card
     reveal(){ if (audio()) [523.25, 659.25, 783.99, 1046.5].forEach((f, i) => tone(f, i * .085, .5, 'sine', .7)); },     // the answer
     join(){ if (audio()) tone(880, 0, .12, 'sine', .4, 1174.66); },                                                      // a new name on the board
@@ -207,15 +272,24 @@
     }
     if (text === capShown) return;
     capShown = text;
-    if (text) document.getElementById('capText').textContent = text;
+    if (text) $('capText').textContent = text;
     document.body.classList.toggle('cap-on', !!text);
   }
 
+  /* Where the show is. The same sums as timeline() in api/preshow.js: each card is one cycle (wheel, question, answer);
+     the cards run in order and the last ends when the closing countdown begins; before card 1 is the intro.
+     s names this pass of this card (it differs each time round in the looping preview). */
   function timeline(now){
-    const cycle = T.ask + T.answer;
-    const anchor = at ? (at - T.final) % cycle : 0;
-    const s = Math.floor((now - anchor) / cycle), into = now - anchor - s * cycle, n = cards.length || 1;
-    return { s, into, qi: ((s % n) + n) % n, reveal: into >= T.ask, closed: at ? now >= at - T.final : false };
+    const n = cards.length || 1, cycle = T.spin + T.ask + T.answer;
+    let qi = 0, into = 0, intro = 0, closed = false, s = -1;
+    if (!at) { s = Math.floor(now / cycle); qi = s % n; into = now - s * cycle; }
+    else {
+      const el = now - (at - T.final - n * cycle);
+      closed = now >= at - T.final;
+      if (el < 0) intro = -el; else { qi = Math.min(n - 1, Math.floor(el / cycle)); into = el - qi * cycle; s = qi; }
+    }
+    const phase = closed ? 'closed' : intro ? 'intro' : into < T.spin ? 'spin' : into < T.spin + T.ask ? 'ask' : 'answer';
+    return { s, qi, into, askInto: into - T.spin, intro, phase, reveal: phase === 'answer', closed };
   }
 
   async function pull(withCards){
@@ -225,8 +299,8 @@
       if (!r.ok) throw new Error('state ' + r.status);
       const d = await r.json(), t1 = Date.now(), rtt = t1 - t0;
       if (!synced || rtt < 600) { offset = d.now + rtt / 2 - t1; synced = true; }   // a slow round trip is a poor clock sample
-      T = { ask: d.ask, answer: d.answer, final: d.final };
-      if (d.cards) cards = d.cards;
+      T = { spin: d.spin, ask: d.ask, answer: d.answer, final: d.final };
+      if (d.cards) { cards = d.cards; buildWheel(); }
       if (d.reveal) reveals[d.reveal.qi] = d.reveal;
       if (d.cue) cue = d.cue;
       drawBoard(d.top || [], d.players || 0);
@@ -252,6 +326,61 @@
     $('count').textContent = players ? players + (players === 1 ? ' player' : ' players') : '';
   }
 
+  /* ---- the wheel. One wedge per category in this show's cards. The pointer sits at three o'clock. Where the wheel
+          stops is not chance: each round's category is already fixed by the show, and the wheel is turned to it. ---- */
+  const SVGNS = 'http://www.w3.org/2000/svg';
+  let wedges = [], rot = 0, spunFor = null, landedFor = null;
+  function buildWheel(){
+    wedges = [];
+    cards.forEach(c => { if (!wedges.includes(c.short)) wedges.push(c.short); });
+    const svg = $('wheel'); svg.textContent = '';
+    const n = wedges.length, seg = 360 / n, rad = d => d * Math.PI / 180, size = Math.max(4.6, Math.min(8.5, 100 / n));
+    wedges.forEach((label, i) => {
+      const g = document.createElementNS(SVGNS, 'g'); g.dataset.i = i;
+      const a0 = rad(i * seg), a1 = rad((i + 1) * seg);
+      const p = document.createElementNS(SVGNS, 'path');
+      p.setAttribute('d', n === 1 ? 'M-100,0 A100,100 0 1 1 100,0 A100,100 0 1 1 -100,0 Z'
+        : 'M0,0 L' + (100 * Math.cos(a0)).toFixed(3) + ',' + (100 * Math.sin(a0)).toFixed(3) + ' A100,100 0 0 1 ' + (100 * Math.cos(a1)).toFixed(3) + ',' + (100 * Math.sin(a1)).toFixed(3) + ' Z');
+      p.setAttribute('fill', i % 2 ? '#172428' : '#0f181b');
+      const t = document.createElementNS(SVGNS, 'text');
+      t.setAttribute('transform', 'rotate(' + ((i + .5) * seg).toFixed(3) + ') translate(95,0)');
+      t.setAttribute('text-anchor', 'end'); t.setAttribute('dominant-baseline', 'central'); t.setAttribute('font-size', size.toFixed(2));
+      t.textContent = label;
+      g.append(p, t); svg.append(g);
+    });
+    const hub = document.createElementNS(SVGNS, 'circle'); hub.setAttribute('r', 13); hub.setAttribute('fill', '#0b0e0f'); hub.setAttribute('stroke', '#00B050'); hub.setAttribute('stroke-width', 1.2);
+    svg.append(hub);
+    spunFor = null; landedFor = null;
+  }
+  function spinWheel(tl){
+    const c = cards[tl.qi], n = wedges.length, seg = 360 / n, w = Math.max(0, wedges.indexOf(c.short));
+    const turnMs = T.spin * 0.72;                                   // the rest of the spin phase is for reading the result
+    const svg = $('wheel'), box = $('spin');
+    if (spunFor !== tl.s) {
+      spunFor = tl.s; landedFor = null; box.classList.remove('landed');
+      svg.querySelectorAll('.win').forEach(g => g.classList.remove('win'));
+      $('spinNum').textContent = 'Round ' + pad(tl.qi + 1) + ' of ' + pad(cards.length);
+      $('spinCat').textContent = c.cat; $('spinPts').textContent = c.pts + ' points'; $('spinTier').textContent = c.tier;
+      // land a little off the wedge's centre, differently each round, so it looks like a real stop
+      const jitter = (((tl.s * 7919) % 1000) / 1000 - .5) * .56 * seg;
+      const target = (((-(w + .5) * seg + jitter) % 360) + 360) % 360;
+      const left = turnMs - tl.into;
+      svg.style.transition = 'none';
+      if (left > 700) {
+        svg.style.transform = 'rotate(' + rot + 'deg)'; void svg.getBoundingClientRect();
+        rot = rot + 360 * 5 + ((target - (rot % 360) + 360) % 360);
+        svg.style.transition = 'transform ' + left + 'ms cubic-bezier(.12,.62,.1,1)';
+        sfx.spin(left / 1000);
+      } else rot = target;                                           // joined late: skip to where it stops
+      svg.style.transform = 'rotate(' + rot + 'deg)';
+    }
+    if (tl.into >= turnMs && landedFor !== tl.s) {
+      landedFor = tl.s; box.classList.add('landed');
+      const g = svg.querySelector('g[data-i="' + w + '"]'); if (g) g.classList.add('win');
+      sfx.land();
+    }
+  }
+
   function drawCard(tl){
     const rev = tl.reveal ? reveals[tl.qi] : null;
     const key = tl.s + ':' + (rev ? 'a' + rev.answered + '/' + rev.right : 'q');
@@ -260,7 +389,8 @@
     shown = key;
     const c = cards[tl.qi], card = $('card');
     if (fresh) {
-      $('num').textContent = 'Question ' + pad(tl.qi + 1) + ' of ' + pad(cards.length);
+      const num = $('num'); num.textContent = 'Round ' + pad(tl.qi + 1) + ' of ' + pad(cards.length) + '  │  ';
+      const b = document.createElement('b'); b.textContent = c.cat; num.append(b, '  │  ' + c.pts + ' points');
       $('q').textContent = c.q;
       const ul = $('answers'); ul.textContent = '';
       c.a.forEach((t, n) => {
@@ -271,7 +401,6 @@
       });
       $('fact').textContent = ''; $('stat').textContent = '';
       card.classList.remove('answer', 'swap'); void card.offsetWidth; card.classList.add('swap');
-      sfx.card();
     }
     if (rev) {
       if (!card.classList.contains('answer')) sfx.reveal();
@@ -286,29 +415,31 @@
     const now = srvNow();
     const tl = timeline(now);
     caption(now);
+    if (cards.length) document.body.dataset.ph = tl.phase;
     if (at) {
       const left = at - now, secs = Math.max(0, Math.ceil(left / 1000));
       $('clock').hidden = false;
       $('left').textContent = pad(Math.floor(secs / 60)) + ':' + pad(secs % 60);
       $('big').textContent = secs;
-      document.body.classList.toggle('final-on', tl.closed);
-      $('btitle').textContent = tl.closed ? 'Final standings' : 'Leaderboard';
+      $('btitle').textContent = tl.closed ? 'Final standings' : tl.phase === 'intro' ? 'Who is in' : 'Leaderboard';
       document.body.classList.toggle('out', left <= OUT_MS);
       if (tl.closed && secs <= 10 && secs >= 2 && lastTick !== 'f' + secs) { lastTick = 'f' + secs; sfx.count(); }   // ten down to two, then silence
+      if (tl.phase === 'intro') { const s = Math.ceil(tl.intro / 1000); $('introLeft').textContent = Math.floor(s / 60) + ':' + pad(s % 60); }
     }
-    if (cards.length && !tl.closed) {
+    if (cards.length && tl.phase === 'spin') spinWheel(tl);
+    if (cards.length && (tl.phase === 'ask' || tl.phase === 'answer')) {
       drawCard(tl);
-      const secLeft = Math.ceil((T.ask - tl.into) / 1000);
+      $('bar').style.transform = 'scaleX(' + (tl.reveal ? 0 : Math.max(0, 1 - tl.askInto / T.ask)) + ')';
+      const secLeft = Math.ceil((T.ask - tl.askInto) / 1000);
       if (!tl.reveal && secLeft <= 5 && secLeft >= 1 && lastTick !== tl.s + ':' + secLeft) { lastTick = tl.s + ':' + secLeft; sfx.tick(); }
-      $('bar').style.transform = 'scaleX(' + (tl.reveal ? 0 : 1 - tl.into / T.ask) + ')';
       // the moment a card closes, fetch its answer straight away rather than waiting for the next poll
       if (tl.reveal && !reveals[tl.qi] && Date.now() - lastAsk > 450) { lastAsk = Date.now(); pull(); }
     }
     requestAnimationFrame(frame);
   }
 
-  new QRCode($('qr'), { text: location.origin + '/609' + (at ? '?at=' + at : ''), width: 360, height: 360,
-    colorDark: '#000000', colorLight: '#ffffff', correctLevel: QRCode.CorrectLevel.M });
+  const joinUrl = location.origin + '/609' + (at ? '?at=' + at : '');
+  for (const id of ['qr', 'qrBig']) new QRCode($(id), { text: joinUrl, width: 480, height: 480, colorDark: '#000000', colorLight: '#ffffff', correctLevel: QRCode.CorrectLevel.M });
   pull(true).then(() => { if (!cards.length) setTimeout(() => pull(true), 1500); });
   setInterval(() => pull(!cards.length), POLL_MS);
   frame();
