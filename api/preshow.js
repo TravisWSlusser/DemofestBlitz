@@ -123,7 +123,7 @@ function cleanCards(list) {
     const ok = Number(c.ok), d = [1, 2, 3].includes(Number(c.d)) ? Number(c.d) : 1;
     if (!q || !a || a.some(x => !x) || !Number.isInteger(ok) || ok < 0 || ok > 3) return null;
     const cat = text(c.cat, 40) || 'Trivia';
-    out.push({ q, a, ok, d, cat, short: (text(c.short, 16) || cat.slice(0, 16)).toUpperCase(), fact: text(c.fact, 300), line: c.kind === 'line' });
+    out.push({ q, a, ok, d, cat, short: (text(c.short, 16) || cat.slice(0, 16)).toUpperCase(), fact: text(c.fact, 300), line: c.kind === 'line' || c.line === true });   // (stored cards come back with the flag, not the kind)
   }
   return out;
 }
