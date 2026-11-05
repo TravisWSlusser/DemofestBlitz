@@ -120,6 +120,28 @@
   /* This phone's identity is a random token that never leaves it except in a request header. The server only ever
      stores the token's SHA-256. Pairing, the dashboard and the remove button are described in api/preshow.js. */
   const API = '/api/preshow/';
+  /* Vercel can answer an API call with its security checkpoint: a 403 page that a browser passes by itself but a
+     background request cannot. When that happens the checkpoint is opened once in a hidden frame, where the browser
+     passes it, and the call is made again. Every API call on this page goes through call(). */
+  let gate = null;
+  function passCheckpoint(){
+    if (!gate) gate = new Promise(done => {
+      const f = document.createElement('iframe'); let loads = 0, over = false;
+      f.setAttribute('aria-hidden', 'true'); f.tabIndex = -1;
+      f.style.cssText = 'position:fixed;left:-9999px;top:0;width:320px;height:240px;border:0;opacity:0;pointer-events:none';
+      const end = () => { if (over) return; over = true; f.remove(); gate = null; done(); };
+      f.onload = () => { if (++loads >= 2) setTimeout(end, 300); };     // first the checkpoint, then the real answer
+      setTimeout(end, 8000);
+      f.src = '/api/preshow/state?show=preview&gate=' + Date.now();
+      document.body.append(f);
+    });
+    return gate;
+  }
+  async function call(url, opts){
+    let r = await fetch(url, opts);
+    if (r.status === 403 && r.headers.get('x-vercel-mitigated') === 'challenge') { await passCheckpoint(); r = await fetch(url, opts); }
+    return r;
+  }
   const KEY = 'preshow609.admin';
   const $ = id => document.getElementById(id);
   const pad = n => String(n).padStart(2, '0');
@@ -139,7 +161,7 @@
   async function askCode(){
     if (Date.now() - codeAsked < 20000) return; codeAsked = Date.now();
     try {
-      const r = await fetch(API + 'pair', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ hash: await hashOf(token) }) });
+      const r = await call(API + 'pair', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ hash: await hashOf(token) }) });
       const j = await r.json(); if (j.code) $('code').textContent = j.code;
     } catch (_) {}
   }
@@ -147,7 +169,7 @@
   async function pull(){
     const t0 = Date.now();
     try {
-      const r = await fetch(API + 'admin', { cache: 'no-store', headers: { 'X-Admin-Token': token } });
+      const r = await call(API + 'admin', { cache: 'no-store', headers: { 'X-Admin-Token': token } });
       if (!r.ok) throw new Error('admin ' + r.status);
       const j = await r.json(), t1 = Date.now();
       offset = j.now + (t1 - t0) / 2 - t1; lastOk = t1; d = j;
@@ -198,7 +220,7 @@
   async function remove(p){
     if (sureId !== p.id) { sureId = p.id; draw(); return; }            // first tap asks, second tap does it
     sureId = null; openId = null;
-    try { await fetch(API + 'kick', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Admin-Token': token }, body: JSON.stringify({ id: p.id }) }); } catch (_) {}
+    try { await call(API + 'kick', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Admin-Token': token }, body: JSON.stringify({ id: p.id }) }); } catch (_) {}
     pull();
   }
 

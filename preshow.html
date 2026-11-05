@@ -228,6 +228,28 @@
      screen and the phones flip together. ?at=<epoch ms> is show time, passed by the launcher; it is also the show id,
      so every run gets its own empty leaderboard. Without it the page runs as an endless preview. */
   const API = '/api/preshow/';
+  /* Vercel can answer an API call with its security checkpoint: a 403 page that a browser passes by itself but a
+     background request cannot. When that happens the checkpoint is opened once in a hidden frame, where the browser
+     passes it, and the call is made again. Every API call on this page goes through call(). */
+  let gate = null;
+  function passCheckpoint(){
+    if (!gate) gate = new Promise(done => {
+      const f = document.createElement('iframe'); let loads = 0, over = false;
+      f.setAttribute('aria-hidden', 'true'); f.tabIndex = -1;
+      f.style.cssText = 'position:fixed;left:-9999px;top:0;width:320px;height:240px;border:0;opacity:0;pointer-events:none';
+      const end = () => { if (over) return; over = true; f.remove(); gate = null; done(); };
+      f.onload = () => { if (++loads >= 2) setTimeout(end, 300); };     // first the checkpoint, then the real answer
+      setTimeout(end, 8000);
+      f.src = '/api/preshow/state?show=preview&gate=' + Date.now();
+      document.body.append(f);
+    });
+    return gate;
+  }
+  async function call(url, opts){
+    let r = await fetch(url, opts);
+    if (r.status === 403 && r.headers.get('x-vercel-mitigated') === 'challenge') { await passCheckpoint(); r = await fetch(url, opts); }
+    return r;
+  }
   const POLL_MS = 2500, OUT_MS = 1100;
   // ?in=<minutes> is a shortcut for testing by link: show time is that many minutes after the page loads
   const qs0 = new URLSearchParams(location.search);
@@ -317,7 +339,7 @@
   async function pull(withCards){
     const t0 = Date.now();
     try {
-      const r = await fetch(API + 'state?show=' + show + (withCards ? '&cards=1' : ''), { cache: 'no-store' });
+      const r = await call(API + 'state?show=' + show + (withCards ? '&cards=1' : ''), { cache: 'no-store' });
       if (!r.ok) throw new Error('state ' + r.status);
       const d = await r.json(), t1 = Date.now(), rtt = t1 - t0;
       if (!synced || rtt < 600) { offset = d.now + rtt / 2 - t1; synced = true; }   // a slow round trip is a poor clock sample

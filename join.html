@@ -130,6 +130,28 @@
   /* Runs on the server's clock, like the big screen (see api/preshow.js). ?at=<epoch ms> comes from the QR code and
      is both show time and the show id. The player's token is kept on this phone only and sent in a header. */
   const API = '/api/preshow/';
+  /* Vercel can answer an API call with its security checkpoint: a 403 page that a browser passes by itself but a
+     background request cannot. When that happens the checkpoint is opened once in a hidden frame, where the browser
+     passes it, and the call is made again. Every API call on this page goes through call(). */
+  let gate = null;
+  function passCheckpoint(){
+    if (!gate) gate = new Promise(done => {
+      const f = document.createElement('iframe'); let loads = 0, over = false;
+      f.setAttribute('aria-hidden', 'true'); f.tabIndex = -1;
+      f.style.cssText = 'position:fixed;left:-9999px;top:0;width:320px;height:240px;border:0;opacity:0;pointer-events:none';
+      const end = () => { if (over) return; over = true; f.remove(); gate = null; done(); };
+      f.onload = () => { if (++loads >= 2) setTimeout(end, 300); };     // first the checkpoint, then the real answer
+      setTimeout(end, 8000);
+      f.src = '/api/preshow/state?show=preview&gate=' + Date.now();
+      document.body.append(f);
+    });
+    return gate;
+  }
+  async function call(url, opts){
+    let r = await fetch(url, opts);
+    if (r.status === 403 && r.headers.get('x-vercel-mitigated') === 'challenge') { await passCheckpoint(); r = await fetch(url, opts); }
+    return r;
+  }
   const at = Number(new URLSearchParams(location.search).get('at')) || 0;
   const show = at ? String(at) : 'preview';
   const KEY = 'preshow609:' + show;
@@ -183,7 +205,7 @@
   async function pull(){
     const t0 = Date.now();
     try {
-      const r = await fetch(API + 'state?show=' + show + (cards.length ? '' : '&cards=1'), { cache: 'no-store', headers: me ? { 'X-Player-Token': me.token } : {} });
+      const r = await call(API + 'state?show=' + show + (cards.length ? '' : '&cards=1'), { cache: 'no-store', headers: me ? { 'X-Player-Token': me.token } : {} });
       if (!r.ok) throw new Error('state ' + r.status);
       const d = await r.json(), t1 = Date.now(), rtt = t1 - t0;
       if (!synced || rtt < 800) { offset = d.now + rtt / 2 - t1; synced = true; }
@@ -207,7 +229,7 @@
     if (pick !== null) return;
     if (timeline(srvNow()).phase !== 'ask') return;
     pick = n; draw(true);
-    fetch(API + 'answer', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Player-Token': me.token }, body: JSON.stringify({ show, choice: n }) })
+    call(API + 'answer', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Player-Token': me.token }, body: JSON.stringify({ show, choice: n }) })
       .then(r => r.json()).then(d => {
         if (d && d.ok) { if (d.pick !== pick) { pick = d.pick; draw(true); } }
         else if (d && d.reason) { late = true; draw(true); }
@@ -302,7 +324,7 @@
     if (name.length < 2) { $('err').textContent = 'Enter a name, 2 to 18 characters.'; return; }
     $('go').disabled = true; $('err').textContent = '';
     try {
-      const r = await fetch(API + 'join', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ show, name }) });
+      const r = await call(API + 'join', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ show, name }) });
       const d = await r.json();
       if (!r.ok || !d.ok) throw new Error(d.error || 'Could not join. Try again.');
       me = { token: d.token, name: d.name };
