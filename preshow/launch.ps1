@@ -13,7 +13,11 @@ param(
   [string]$Deck   = '',                         # path to the .pptx; empty = the only .pptx next to this script
   [string]$ShowAt = '13:00',                    # clock time the talk starts (24h, laptop time; HH:mm or HH:mm:ss), or "+2" = two minutes from now
   [string]$Url    = 'https://demofest-blitz.vercel.app/preshow.html',
-  [string]$Bg     = '000000'                    # colour the pre-show fades to in its last second (black matches PowerPoint's held screen)
+  [string]$Bg     = '000000',                   # unused by the current page (it fades to the deck background); kept for other decks
+  [switch]$Nudge                                # OFF by default. The laptop's policy locks the screen after 10 idle minutes. The script
+                                                # already asks Windows to keep the display on, the way a video player does. If a rehearsal
+                                                # shows the lock still arriving, -Nudge taps the unused F15 key every 4 minutes so Windows
+                                                # sees activity. That sidesteps the auto-lock while the pre-show runs: the owner's call.
 )
 $ErrorActionPreference = 'Stop'
 $log = Join-Path $PSScriptRoot 'last-run.log'
@@ -140,9 +144,15 @@ public static class PreShowWin {
   } else { Say 'Could not find the kiosk window to pin it on top.' }
 
   # ---- 3. wait for show time (or for the kiosk window to be closed by hand), then reveal the deck
+  $nextNudge = (Get-Date).AddSeconds(240)
+  if ($Nudge) { Say 'Nudge is on: an F15 key tap every 4 minutes keeps the idle lock away.' }
   while ((Get-Date) -lt $target) {
     Start-Sleep -Milliseconds 200
     if (-not (KioskProcs)) { Say 'Kiosk closed by hand; revealing the deck now.'; break }
+    if ($Nudge -and (Get-Date) -ge $nextNudge) {
+      [PreShowWin]::keybd_event(0x7E, 0, 0, [UIntPtr]::Zero); [PreShowWin]::keybd_event(0x7E, 0, 2, [UIntPtr]::Zero)   # F15 down, up
+      $nextNudge = (Get-Date).AddSeconds(240)
+    }
   }
   # By now the page has let its words fade and shows only the deck's background. Start slide 1 while the slideshow is
   # still hidden under the browser, then lift it above the browser and give it the keyboard, and only then close the
