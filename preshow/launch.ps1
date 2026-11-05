@@ -1,4 +1,4 @@
-<#
+﻿<#
   Side-Qlik pre-show launcher (Windows, PowerShell 5.1).
 
   1. Starts the deck's slideshow and holds it on PowerPoint's black screen.
@@ -27,6 +27,17 @@ param(
 )
 $ErrorActionPreference = 'Stop'
 $log = Join-Path $PSScriptRoot 'last-run.log'
+
+# ---- one pre-show at a time. A second launch (an extra double-click, or the other shortcut) leaves at once and
+# touches nothing: no second slideshow, no second browser, no second voice. The lock is held for as long as this
+# script runs and frees itself when it ends, however it ends.
+$script:gate = New-Object System.Threading.Mutex($false, 'SideQlikPreShow609')
+$mine = $false
+try { $mine = $script:gate.WaitOne(0) } catch [System.Threading.AbandonedMutexException] { $mine = $true }   # the last run was killed: the lock is ours
+if (-not $mine) {
+  Add-Content -Path $log -Value ("[{0:HH:mm:ss}] A second launch was ignored: the pre-show is already running." -f (Get-Date))
+  exit 0
+}
 function Say($m) { $line = "[{0:HH:mm:ss}] {1}" -f (Get-Date), $m; Write-Host $line; Add-Content -Path $log -Value $line }
 function Retry([scriptblock]$do, [int]$tries = 40) {           # PowerPoint answers "busy" (RPC_E_CALL_REJECTED) while it is loading; ask again
   for ($i = 1; ; $i++) { try { return (& $do) } catch { if ($i -ge $tries) { throw }; Start-Sleep -Milliseconds 250 } }
@@ -297,6 +308,7 @@ public static class PreShowWin {
 }
 catch {
   Say "FAILED: $($_.Exception.Message)"
+  try { $script:gate.ReleaseMutex() } catch {}                      # the error box below must not keep the next launch out
   try { Add-Type -AssemblyName System.Windows.Forms; [System.Windows.Forms.MessageBox]::Show("Pre-show could not start:`n`n$($_.Exception.Message)", 'Side-Qlik Pre-Show') | Out-Null } catch {}
   exit 1
 }
