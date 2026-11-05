@@ -98,6 +98,8 @@
   .pic { position: absolute; right: 0; bottom: 0; width: 16.5cqw; margin: 0; opacity: 0; transform: scale(.96); transition: opacity 1s ease, transform 1s ease; pointer-events: none; }
   .pic.on { opacity: 1; transform: none; }
   .pic img { display: block; width: 100%; height: 17cqw; object-fit: cover; object-position: 50% 22%; border-left: .28cqw solid var(--green); }
+  .pic.fit img { object-fit: contain; object-position: 50% 50%; border-left: 0; }                 /* a poster, cover or logo is shown whole */
+  .pic.card img { background: #fff; padding: .8cqw; box-sizing: border-box; border-radius: .3cqw; }   /* a logo may be see-through: give it a white card */
   .pic figcaption { font-weight: 300; font-size: .7cqw; line-height: 1.25; color: var(--soft); text-transform: none; letter-spacing: 0; margin-top: .5cqh; opacity: .75; }
 
   /* timer: a thin green line that runs out while the card is open */
@@ -477,6 +479,8 @@
       $('fact').textContent = rev.fact;
       if (rev.img && $('picImg').getAttribute('src') !== rev.img) {      // the picture arrives with the answer, and shows once it has loaded
         const im = $('picImg'); im.onload = () => $('pic').classList.add('on'); im.onerror = () => $('pic').classList.remove('on');
+        const whole = /\/wikipedia\/en\/|\.svg\.png$/i.test(rev.img);   // art (kept on English Wikipedia, or drawn as a vector): not cropped like a photograph
+        $('pic').classList.toggle('fit', whole); $('pic').classList.toggle('card', whole && /\.png$/i.test(rev.img));
         im.src = rev.img; $('picBy').textContent = rev.credit || '';
       }
       $('stat').textContent = rev.answered ? rev.answered + ' answered │ ' + Math.round(100 * rev.right / rev.answered) + '% got it' : '';

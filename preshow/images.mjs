@@ -1,11 +1,13 @@
 // Finds a picture for the reveal of every question in the local bank that names a Wikipedia article in "pic".
 //   node images.mjs <questions.json> [--again]
 //
-// Only freely licensed pictures are taken (Wikipedia is asked for those alone), so real people, places and things
-// usually have one and film or cartoon characters usually do not: stills and posters are copyrighted. The address
-// of a 500-pixel version on Wikimedia's image server is written into the question as "img", with the photographer
-// and licence as "credit", which the big screen prints small under the picture. Nothing is downloaded or stored:
-// the big screen loads the picture from Wikimedia at the reveal. --again looks every picture up afresh.
+// "pic": "Bill Paxton" takes that article's picture only if it is freely licensed (a photograph of a real person,
+// place or thing). "pic": "!Twister (1996 film)" takes the article's picture whatever its licence: a film poster,
+// a game cover, a logo. Those are copyrighted and Wikipedia shows them as fair use; showing one for a few seconds
+// in a talk is the presenter's call. "pic": "File:Name.svg" names one particular file. The address of a 500-pixel
+// version on Wikimedia's image server is written into the question as "img", with a "credit" that the big screen
+// prints small under the picture. Nothing is downloaded or stored: the big screen loads the picture from Wikimedia
+// at the reveal. --again looks every picture up afresh.
 import { readFileSync, writeFileSync } from 'node:fs';
 
 const file = process.argv[2], again = process.argv.includes('--again');
@@ -27,20 +29,31 @@ for (const q of b.bank) {
   if (q.img && !again) { kept++; continue; }
   delete q.img; delete q.credit;
   try {
-    const page = (await api({ titles: q.pic, prop: 'pageimages', piprop: 'thumbnail|name', pithumbsize: '500', pilicense: 'free' })).query.pages[0];
-    const src = page && page.thumbnail && page.thumbnail.source && page.thumbnail.source.split('?')[0];   // without the tracking tail
-    if (!src || !OK.test(src)) { none.push(q.id + ' (' + q.pic + '): no free picture'); continue; }
+    // three ways to name a picture: "Article" = that article's picture if it is freely licensed; "!Article" = its
+    // picture whatever the licence (a poster, a cover, a logo); "File:Name.svg" = one particular file
+    const any = q.pic.startsWith('!'), direct = /^File:/i.test(q.pic);
+    let fileTitle = direct ? q.pic : '', src = '';
+    if (!direct) {
+      const page = (await api({ titles: any ? q.pic.slice(1) : q.pic, prop: 'pageimages', piprop: 'thumbnail|name', pithumbsize: '500', pilicense: any ? 'any' : 'free' })).query.pages[0];
+      src = page && page.thumbnail && page.thumbnail.source && page.thumbnail.source.split('?')[0];   // without the tracking tail
+      if (src) fileTitle = 'File:' + page.pageimage;
+    }
+    if (!fileTitle) { none.push(q.id + ' (' + q.pic + '): no ' + (any ? '' : 'free ') + 'picture'); continue; }
+    const info = (await api({ titles: fileTitle, prop: 'imageinfo', iiprop: 'url|extmetadata', iiurlwidth: '500' })).query.pages[0];
+    const ii = info && info.imageinfo && info.imageinfo[0];
+    if (!src && ii) src = String(ii.thumburl || ii.url || '').split('?')[0];
+    if (!src || !OK.test(src)) { none.push(q.id + ' (' + q.pic + '): no usable picture'); continue; }
     const head = await fetch(src, { headers: UA });
     if (!head.ok || !/^image\//.test(head.headers.get('content-type') || '')) { none.push(q.id + ' (' + q.pic + '): the picture did not load, ' + head.status); continue; }
-    const info = (await api({ titles: 'File:' + page.pageimage, prop: 'imageinfo', iiprop: 'extmetadata' })).query.pages[0];
-    const meta = (info && info.imageinfo && info.imageinfo[0] && info.imageinfo[0].extmetadata) || {};
+    const meta = (ii && ii.extmetadata) || {};
     let who = ascii(plain(meta.Artist && meta.Artist.value)).replace(/^The original uploader was /i, '').replace(/\s+(?:at|on|on the) \w+ Wikipedia\b.*$/i, '')
       .replace(/\s+at https?:\S+.*$/i, '').replace(/\s+from [A-Z][^/]*$/, '').replace(/\s*\(.*$/, '').trim();
     const half = who.split(' / '); if (half.length === 2 && half[0] === half[1]) who = half[0];
     who = who.slice(0, 44).trim();
     const lic = ascii(plain(meta.LicenseShortName && meta.LicenseShortName.value)).slice(0, 30);
     q.img = src;
-    q.credit = [who, 'Wikimedia Commons', lic].filter(Boolean).join(' / ');
+    const fair = /\/wikipedia\/en\//.test(src);                         // kept on English Wikipedia, not Commons: copyrighted, shown there as fair use
+    q.credit = fair ? 'Via Wikipedia' : [who, 'Wikimedia Commons', lic].filter(Boolean).join(' / ');
     found++;
     console.log(q.id.padEnd(6) + q.pic.padEnd(34) + q.credit);
   } catch (e) { none.push(q.id + ' (' + q.pic + '): ' + e.message); }
