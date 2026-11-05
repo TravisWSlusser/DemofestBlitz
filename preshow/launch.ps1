@@ -53,7 +53,8 @@ Set-Content -Path $log -Value "Pre-show run $(Get-Date -Format 'yyyy-MM-dd HH:mm
 
 # ---- the start screen. Two buttons, in the deck's own dress:
 #   AUDIO TEST       one soft chime through the speakers, to prove the laptop's sound is reaching the room.
-#   LAUNCH PRE SHOW  closes this window and starts the pre-show. A "+10" show time starts counting from this press.
+#   LAUNCH PRE SHOW  starts the pre-show, on the second press: the first press only arms the button.
+#                    A "+10" show time starts counting from that second press.
 # Esc closes the window without starting anything. Returns 'launch' or 'cancel'.
 function Show-StartScreen([string]$deckName, [string]$whenText, [object[]]$tracks) {
   Add-Type -AssemblyName System.Windows.Forms, System.Drawing
@@ -114,7 +115,8 @@ function Show-StartScreen([string]$deckName, [string]$whenText, [object[]]$track
   $bw.Write($ascii.GetBytes('data')); $bw.Write([int]$pcm.Length); $bw.Write($pcm); $bw.Flush()
 
   # what the button handlers need lives in one script-level table
-  $script:ss = @{ result = 'cancel'; form = $form; status = $status; wav = $wav; player = (New-Object System.Media.SoundPlayer); count = 0 }
+  $script:ss = @{ result = 'cancel'; form = $form; status = $status; wav = $wav; player = (New-Object System.Media.SoundPlayer); count = 0
+                  bTest = $bTest; bGo = $bGo; green = $green; armedAt = $null }
   $bTest.Add_Click({
     $s = $script:ss
     try {
@@ -122,11 +124,28 @@ function Show-StartScreen([string]$deckName, [string]$whenText, [object[]]$track
       $s.status.Text = 'TEST CHIME ' + $s.count + ' SENT. IF YOU HEARD IT, THE SPEAKERS ARE CONNECTED. IF NOT, CHECK THE CABLE AND THE VOLUME.'
     } catch { $s.status.Text = ('THE TEST CHIME COULD NOT PLAY: ' + $_.Exception.Message).ToUpper() }
   })
-  $bGo.Add_Click({ $script:ss.result = 'launch'; $script:ss.form.Close() })
+  # LAUNCH takes two presses. The first only arms it: the button turns white and asks to be pressed again. The second
+  # starts the show. One double-click cannot do both, because the second press has to come at least half a second
+  # after the first. An armed button that is not pressed again goes back to normal after six seconds.
+  $bGo.Add_Click({
+    $s = $script:ss
+    if (-not $s.armedAt) {
+      $s.armedAt = Get-Date; $s.bGo.Text = 'PRESS AGAIN TO START'; $s.bGo.BackColor = [System.Drawing.Color]::White
+      $s.status.Text = 'PRESS AGAIN TO START THE PRE-SHOW. LEAVE IT FOR SIX SECONDS AND NOTHING HAPPENS.'
+    } elseif (((Get-Date) - $s.armedAt).TotalMilliseconds -ge 500) { $s.result = 'launch'; $s.form.Close() }
+  })
+  $arm = New-Object System.Windows.Forms.Timer; $arm.Interval = 200
+  $arm.Add_Tick({
+    $s = $script:ss
+    if ($s.armedAt -and ((Get-Date) - $s.armedAt).TotalSeconds -ge 6) {
+      $s.armedAt = $null; $s.bGo.Text = 'LAUNCH PRE SHOW'; $s.bGo.BackColor = $s.green
+      $s.status.Text = 'LAUNCH WAS NOT CONFIRMED. NOTHING HAS STARTED.'
+    }
+  })
   $esc.Add_Click({ $script:ss.form.Close() })
   $form.Add_KeyDown({ param($sender, $e) if ($e.KeyCode -eq [System.Windows.Forms.Keys]::Escape) { $script:ss.form.Close() } })
   $form.Add_Shown({ $script:ss.form.Activate() })
-  [void]$form.ShowDialog(); $form.Dispose()
+  $arm.Start(); [void]$form.ShowDialog(); $arm.Stop(); $arm.Dispose(); $form.Dispose()
   return $script:ss.result
 }
 
