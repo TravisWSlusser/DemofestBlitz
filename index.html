@@ -21,6 +21,25 @@
   .qr .t1 { font-family: 'VT323', monospace; font-size: 1.35rem; line-height: 1; letter-spacing: .08em; color: #fff; }
   .qr .t2 { font-family: 'Share Tech Mono', monospace; font-size: .5rem; letter-spacing: .12em; text-transform: uppercase; color: var(--cyan); line-height: 1.6; }
   @media (max-width: 900px) { .qr { display: none; } }
+  /* "Who is Qlik?": a small button top-right, mirroring the QR, and the card it opens */
+  .whobtn { position: absolute; right: 0; top: 6px; font-size: .72rem; letter-spacing: .14em; padding: 11px 16px; }
+  .whobtn b { display: inline-block; margin-right: 8px; width: 1.5em; line-height: 1.5em; border: 1px solid currentColor; border-radius: 50%; text-align: center; font-weight: normal; }
+  @media (max-width: 900px) { .whobtn { position: static; } }
+  .who { position: fixed; inset: 0; z-index: 30; display: flex; align-items: center; justify-content: center; padding: 24px; background: rgba(6,12,24,.84); }
+  .who[hidden] { display: none; }
+  .who .card { position: relative; width: min(780px, 100%); max-height: 100%; overflow: auto; padding: 26px 34px 28px; background: #0b1528; text-align: left; animation: whoIn .22s ease both; }
+  @keyframes whoIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
+  .who h2 { font-family: 'VT323', monospace; font-weight: normal; font-size: clamp(30px, 4.4vh, 46px); line-height: 1; letter-spacing: .04em; color: #fff; margin: 10px 0 12px; text-shadow: 0 0 18px rgba(16,207,201,.35); }
+  .who p, .who li { font-family: 'VT323', monospace; font-size: clamp(18px, 2.5vh, 24px); line-height: 1.22; color: var(--ink); }
+  .who p { margin: 0 0 12px; }
+  .who ul { list-style: none; margin: 0 0 14px; padding: 0; display: grid; gap: 6px; }
+  .who li { padding-left: 1.1em; text-indent: -1.1em; }
+  .who li::before { content: '> '; color: var(--cyan); }
+  .who li b { color: #fff; font-weight: normal; }
+  .who .facts { font-family: 'Share Tech Mono', monospace; font-size: .62rem; letter-spacing: .14em; text-transform: uppercase; color: var(--muted); line-height: 1.9; margin: 0 0 14px; }
+  .who .why { border-top: 1px solid rgba(16,207,201,.25); padding-top: 12px; color: var(--muted); }
+  .who .why b { color: var(--cyan); font-weight: normal; }
+  .who .row { display: flex; justify-content: flex-end; margin-top: 6px; }
   header .logo-video { height: clamp(80px, 15vh, 170px); filter: drop-shadow(0 0 28px rgba(16,207,201,.55)); }
   header .label { font-size: .8rem; }
   header .strap { display: flex; align-items: center; gap: 18px; }
@@ -88,6 +107,7 @@
         <source src="assets/brand/REC_Room_logo_360.webm" type="video/webm">
       </video>
       <div class="strap"><span class="label cursor">Choose your path</span></div>
+      <button type="button" class="btn ghost whobtn" id="whoBtn" aria-haspopup="dialog"><b>?</b>Who is Qlik?</button>
     </header>
 
     <main>
@@ -129,12 +149,44 @@
     </footer>
   </div>
 
+  <!-- "Who is Qlik?": for visitors who know the booth but not the company behind it -->
+  <div class="who" id="who" hidden role="dialog" aria-modal="true" aria-labelledby="whoTitle">
+    <div class="card frame">
+      <div class="corner tl"></div><div class="corner tr"></div><div class="corner bl"></div><div class="corner br"></div>
+      <div class="label">Who is Qlik?</div>
+      <h2 id="whoTitle">QLIK TURNS DATA INTO DECISIONS</h2>
+      <p>Qlik is a software company. Its products help organizations bring their data together, make sure it can be trusted, and use it to decide what to do next.</p>
+      <ul>
+        <li><b>Data integration:</b> moving data out of many systems and into one place.</li>
+        <li><b>Data quality:</b> keeping that data clean and reliable.</li>
+        <li><b>Analytics and AI:</b> dashboards, predictions and plain-language answers.</li>
+      </ul>
+      <div class="facts">Founded in Sweden, 1993 &nbsp;·&nbsp; Based in King of Prussia, Pennsylvania &nbsp;·&nbsp; 40,000+ customers worldwide</div>
+      <p class="why"><b>Why is Qlik at Demofest?</b> Qlik's sales enablement team built this arcade to train its own sellers. The questions in Side-Qlik Blitz are the ones Qlik sellers play.</p>
+      <div class="row"><button type="button" class="btn" id="whoClose">Got it</button></div>
+    </div>
+  </div>
+
   <script src="assets/ticker.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
   <script>
     // the take-home code points at this deployment's own /visit page
     try { new QRCode(document.getElementById('qr'), { text: location.origin + '/visit', width: 196, height: 196, colorDark: '#06101f', colorLight: '#ffffff', correctLevel: QRCode.CorrectLevel.M }); } catch (e) {}
     Ticker.mount(document.getElementById('ticker'));
+    // "Who is Qlik?": opens over the home screen. Got it, a tap outside the card or Esc closes it, and so does 45
+    // seconds without a touch, so the next visitor always finds the home screen.
+    (function () {
+      const who = document.getElementById('who'), btn = document.getElementById('whoBtn'), done = document.getElementById('whoClose');
+      let timer = 0;
+      const arm = () => { clearTimeout(timer); timer = setTimeout(close, 45000); };
+      function open() { who.hidden = false; done.focus(); arm(); }
+      function close() { clearTimeout(timer); if (who.hidden) return; who.hidden = true; btn.focus(); }
+      btn.addEventListener('click', open);
+      done.addEventListener('click', close);
+      who.addEventListener('click', e => { if (e.target === who) close(); });
+      who.addEventListener('pointermove', arm);
+      document.addEventListener('keydown', e => { if (e.key === 'Escape') close(); });
+    })();
     // Home is where idle returns land: make sure no previous player lingers.
     try { sessionStorage.removeItem('demofest.player'); } catch (e) {}
   </script>
