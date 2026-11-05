@@ -93,6 +93,12 @@
   .fact { font-weight: 300; font-size: 1.7cqw; line-height: 1.3; color: var(--soft); text-transform: none; }
   .stat { font-weight: 500; font-size: 1.3cqw; color: var(--green); letter-spacing: .04em; margin-top: 1cqh; }
   .card.swap { animation: rise .7s ease both; }
+  /* a picture of the answer, which fades in beside the answers at the reveal. A card that has one keeps the room free from the start. */
+  .card.haspic .answers, .card.haspic .after { margin-right: 19.5cqw; }
+  .pic { position: absolute; right: 0; bottom: 0; width: 16.5cqw; margin: 0; opacity: 0; transform: scale(.96); transition: opacity 1s ease, transform 1s ease; pointer-events: none; }
+  .pic.on { opacity: 1; transform: none; }
+  .pic img { display: block; width: 100%; height: 17cqw; object-fit: cover; object-position: 50% 22%; border-left: .28cqw solid var(--green); }
+  .pic figcaption { font-weight: 300; font-size: .7cqw; line-height: 1.25; color: var(--soft); text-transform: none; letter-spacing: 0; margin-top: .5cqh; opacity: .75; }
 
   /* timer: a thin green line that runs out while the card is open */
   body[data-ph="ask"] .bar, body[data-ph="answer"] .bar { display: block; }
@@ -186,6 +192,7 @@
         <h1 class="q" id="q"></h1>
         <ul class="answers" id="answers"></ul>
         <div class="after"><div class="fact" id="fact"></div><div class="stat" id="stat"></div></div>
+        <figure class="pic" id="pic"><img id="picImg" alt=""><figcaption id="picBy"></figcaption></figure>
       </div>
       <div class="bar"><i id="bar"></i></div>
 
@@ -439,12 +446,17 @@
         li.append(l, s); ul.append(li);
       });
       $('fact').textContent = ''; $('stat').textContent = '';
+      card.classList.toggle('haspic', !!c.pic); $('pic').classList.remove('on'); $('picImg').removeAttribute('src'); $('picBy').textContent = '';
       card.classList.remove('answer', 'swap'); void card.offsetWidth; card.classList.add('swap');
     }
     if (rev) {
       if (!card.classList.contains('answer')) sfx.reveal();
       [...$('answers').children].forEach((li, n) => li.classList.toggle('ok', n === rev.ok));
       $('fact').textContent = rev.fact;
+      if (rev.img && $('picImg').getAttribute('src') !== rev.img) {      // the picture arrives with the answer, and shows once it has loaded
+        const im = $('picImg'); im.onload = () => $('pic').classList.add('on'); im.onerror = () => $('pic').classList.remove('on');
+        im.src = rev.img; $('picBy').textContent = rev.credit || '';
+      }
       $('stat').textContent = rev.answered ? rev.answered + ' answered │ ' + Math.round(100 * rev.right / rev.answered) + '% got it' : '';
       card.classList.add('answer');
     }

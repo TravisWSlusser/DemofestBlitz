@@ -113,6 +113,7 @@ const csvCell = v => { const s = v == null ? '' : String(v); return /[",\n\r]/.t
    file can trust their shape. */
 const POINTS = [0, 100, 300, 500];                    // by difficulty: the harder the question, the more it is worth
 const TIERS = ['', 'Easy', 'Medium', 'Hard'];
+const PICTURE = /^https:\/\/(?:upload|thumb)\.wikimedia\.org\/wikipedia\/[\w\-.~%()!,*'\/]+\.(?:jpe?g|png|webp)$/i;
 const text = (v, max) => (typeof v === 'string' && v.trim() ? v.trim().slice(0, max) : '');
 function cleanCards(list) {
   if (!Array.isArray(list) || list.length < 1 || list.length > 60) return null;
@@ -123,7 +124,9 @@ function cleanCards(list) {
     const ok = Number(c.ok), d = [1, 2, 3].includes(Number(c.d)) ? Number(c.d) : 1;
     if (!q || !a || a.some(x => !x) || !Number.isInteger(ok) || ok < 0 || ok > 3) return null;
     const cat = text(c.cat, 40) || 'Trivia';
-    out.push({ q, a, ok, d, cat, short: (text(c.short, 16) || cat.slice(0, 16)).toUpperCase(), fact: text(c.fact, 300), line: c.kind === 'line' || c.line === true });   // (stored cards come back with the flag, not the kind)
+    const img = PICTURE.test(text(c.img, 500)) ? text(c.img, 500) : '';   // a picture for the reveal: from Wikimedia's image server only
+    out.push({ q, a, ok, d, cat, short: (text(c.short, 16) || cat.slice(0, 16)).toUpperCase(), fact: text(c.fact, 300), line: c.kind === 'line' || c.line === true,   // (stored cards come back with the flag, not the kind)
+               img, credit: img ? text(c.credit, 160) : '' });
   }
   return out;
 }
@@ -141,7 +144,7 @@ async function cardsOf(show) {
   return cards;
 }
 /* What the screen and the phones are given: everything except the right answer and its fact. */
-const publicCards = cards => cards.map(c => ({ q: c.q, a: c.a, cat: c.cat, short: c.short, d: c.d, pts: POINTS[c.d], tier: TIERS[c.d], line: c.line }));
+const publicCards = cards => cards.map(c => ({ q: c.q, a: c.a, cat: c.cat, short: c.short, d: c.d, pts: POINTS[c.d], tier: TIERS[c.d], line: c.line, pic: !!c.img }));   // pic: a picture comes with the reveal (sent any sooner, it would give the answer away)
 
 /* Where the show is at `now`, for a show with n cards. Each card is one cycle: the two spins (SPIN_MS), the question
    is open (ASK_MS), the answer shows (ANSWER_MS). The cards run in order and the last one ends exactly when the
@@ -217,7 +220,7 @@ async function state(req, res) {
   out.top = board.top; out.players = board.players;
   if (t.reveal) {
     const c = cards[t.idx];
-    out.reveal = { qi: t.idx, ok: c.ok, fact: c.fact, ...(await tallyOf(show, t.idx)) };
+    out.reveal = { qi: t.idx, ok: c.ok, fact: c.fact, img: c.img, credit: c.credit, ...(await tallyOf(show, t.idx)) };
   }
   const token = tokenOf(req);
   if (token) {
@@ -433,7 +436,7 @@ const VOICE_MODELS = [process.env.ELEVENLABS_MODEL || 'eleven_v4', 'eleven_v4_tu
 const TAG_MODELS = /^eleven_v[34]/;
 const VOICE_DAILY_CAP = 60;          // generated lines per 24 hours, whatever happens
 const AUDIO_TEST = "[warm, upbeat game show host] Testing, testing... this is your announcer. [playful] If you can hear me clearly over the music, the room is ready. [chuckles] Break a leg.";
-const WELCOME = "[warm, upbeat game show host] Hey, hey... welcome to session six oh nine! [playful] While you're getting settled, grab your phone, scan that code on the screen, and put your name on the board. Right answers score... FAST answers score more. [chuckles] No pressure.";
+const WELCOME = "[warm, upbeat game show host] Hey, hey... welcome to session six oh nine! [playful] The presentation will begin momentarily. Until then... we play for glory. [brisk, clear] Grab your phone, scan the code, and get your name on the board. Each round, the wheel picks a subject, then a second spin picks the difficulty. Harder questions pay more... and a FAST answer can double it. [teasing] Expect movies, cartoons, video games, theme parks, and commercials you still can't forget. [deadpan] Basically, everything you remember instead of your passwords. [competitive, grinning] No prizes. Just bragging rights... so play like it matters.";
 
 /* A name is read aloud to the room, so it gets a second, stricter look than the one for the screen: first name only
    (which defuses most two-word joke names), and nothing from the list of names that are only rude when spoken. */
@@ -550,13 +553,14 @@ function captionParts(line, totalMs, alignment) {
 }
 
 /* One request to ElevenLabs for one model. First the variant that also says when each character is spoken (for
-   captions in step with the voice); if that variant is not offered for this model, the plain one. */
-async function speak(key, model, text) {
+   captions in step with the voice); if that variant is not offered for this model, the plain one. A fixed line (the
+   welcome) is long, and is made once and then stored, so it is given more time: "patient". */
+async function speak(key, model, text, patient) {
   const base = 'https://api.elevenlabs.io/v1/text-to-speech/' + VOICE_ID;
   const headers = { 'xi-api-key': key, 'Content-Type': 'application/json' };
   const body = JSON.stringify({ text, model_id: model });
   try {
-    const r = await fetch(base + '/with-timestamps?output_format=mp3_44100_128', { method: 'POST', headers, body, signal: AbortSignal.timeout(9000) });
+    const r = await fetch(base + '/with-timestamps?output_format=mp3_44100_128', { method: 'POST', headers, body, signal: AbortSignal.timeout(patient ? 15000 : 9000) });
     if (r.ok) { const j = await r.json(); if (j && j.audio_base64) return { ok: true, b64: j.audio_base64, alignment: j.alignment || null, cost: r.headers.get('character-cost') }; }
     else if (r.status === 401 || r.status === 429) return { ok: false, status: r.status, detail: (await r.text().catch(() => '')).slice(0, 400) };
   } catch (_) { /* fall through to the plain request */ }
@@ -583,7 +587,7 @@ async function announce(req, res) {
   // the welcome and the audio-test line are the same for every show, so each is stored once for all of them; a changed
   // text or voice makes a new row
   const rowShow = fixed ? '*' : show;
-  const slot = fixed ? kind + ':timed:' + VOICE_ID + ':' + VOICE_MODELS[0] + ':' + fixed.length : kind === 'mid' ? 'mid:' + t.idx : 'final';
+  const slot = fixed ? kind + ':timed:' + VOICE_ID + ':' + VOICE_MODELS[0] + ':' + sha256(fixed).slice(0, 12) : kind === 'mid' ? 'mid:' + t.idx : 'final';
   const send = async (line, b64, cues, ms) => {
     cues = cues.replace(/six oh nine/gi, '609');                       // written out for the voice, shown as a number in the captions
     if (playAt) {
@@ -620,7 +624,7 @@ async function announce(req, res) {
   let got = null, usedModel = '', problem = { status: 504, detail: 'no answer' };
   for (const model of VOICE_MODELS) {
     const text = TAG_MODELS.test(model) ? line : line.replace(/\s*\[[^\]]*\]\s*/g, ' ').trim();
-    const r = await speak(key, model, text);
+    const r = await speak(key, model, text, !!fixed);
     if (r.ok) { got = r; usedModel = model; break; }
     problem = r; console.error('preshow voice', model, r.status, r.detail);
     if (r.status === 401 || r.status === 429) break;                   // a bad key or an exhausted quota will not improve with another model

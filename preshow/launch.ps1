@@ -201,7 +201,7 @@ try {
       foreach ($id in $ids) {
         $q = $byId["$id"]; if (-not $q) { throw "set '$Set' lists '$id', which is not in the bank" }
         $c = $bank.categories."$($q.cat)"
-        $cards += @{ q = "$($q.q)"; a = @($q.a | ForEach-Object { "$_" }); ok = [int]$q.ok; d = [int]$q.d; fact = "$($q.fact)"; kind = "$($q.kind)"
+        $cards += @{ q = "$($q.q)"; a = @($q.a | ForEach-Object { "$_" }); ok = [int]$q.ok; d = [int]$q.d; fact = "$($q.fact)"; kind = "$($q.kind)"; img = "$($q.img)"; credit = "$($q.credit)"
                      cat = $(if ($c) { "$($c.name)" } else { "$($q.cat)" }); short = $(if ($c) { "$($c.short)" } else { "$($q.cat)" }) }
       }
     } catch { throw "The question file could not be used ($qFile): $($_.Exception.Message)" }
@@ -372,7 +372,7 @@ public static class PreShowWin {
 
   # ---- 3. wait for show time (or for the kiosk window to be closed by hand), then reveal the deck
   # ---- music: every audio file in the music folder, shuffled, played from this laptop. Nothing is streamed or uploaded.
-  # It fades in, moves to the next track when one ends, and is silent just over a second before the deck takes over.
+  # It fades in, moves to the next track when one ends, and fades out as the deck takes over (see SoundTick below).
   $mp = $null; $tracks = @(); $script:ti = -1; $script:trackStart = Get-Date
   $musicDir = if ($Music) { $Music } else { Join-Path $PSScriptRoot 'music' }
   if (Test-Path -LiteralPath $musicDir) {
@@ -415,6 +415,28 @@ public static class PreShowWin {
     Say "Announcer: $($plan.Count) lines planned."
   }
 
+  # ---- the volumes, set five times a second. The music fades in over two seconds, dips to about a fifth under the
+  # announcer, and is never cut: it fades out over $script:fadeSecs once the closing call has been made (or seven
+  # seconds before the deck, with no call). A call that runs late pushes the fade back, so its tail may play out
+  # quietly under slide 1.
+  $script:fadeAt = $null; $script:fadeSecs = 6.0
+  function SoundTick([double]$left) {
+    if ($script:voiceOn) {
+      $spoke = ((Get-Date) - $script:voiceStart).TotalSeconds
+      try { if (($vp.NaturalDuration.HasTimeSpan -and $vp.Position -ge $vp.NaturalDuration.TimeSpan.Subtract([TimeSpan]::FromMilliseconds(200))) -or $spoke -gt 90) { $script:voiceOn = $false } }
+      catch { $script:voiceOn = $false }
+    }
+    $duckTo = if ($script:voiceOn) { 0.22 } else { 1.0 }
+    $script:duck = $script:duck + [Math]::Max(-0.3, [Math]::Min(0.3, $duckTo - $script:duck))
+    if (-not $mp) { return }
+    if (-not $script:fadeAt -and $left -lt 7 -and -not $script:voiceOn) { $script:fadeAt = Get-Date }
+    $v = $MusicVolume * [Math]::Min(1.0, ((Get-Date) - $script:trackStart).TotalSeconds / 2)
+    if ($script:fadeAt) { $v = $v * [Math]::Max(0.0, 1.0 - ((Get-Date) - $script:fadeAt).TotalSeconds / $script:fadeSecs) }
+    try { $mp.Volume = $v * $script:duck } catch {}   # (the 1.0 and 0.0 above matter: with whole numbers PowerShell rounds the fade to all or nothing)
+  }
+  # true while there is still something to hear: a fade that has not finished, or the announcer mid-sentence
+  function SoundLeft { ($mp -and (-not $script:fadeAt -or ((Get-Date) - $script:fadeAt).TotalSeconds -lt $script:fadeSecs)) -or ($vp -and $script:voiceOn) }
+
   $nextNudge = (Get-Date).AddSeconds(240)
   if ($Nudge) { Say 'Nudge is on: an F15 key tap every 4 minutes keeps the idle lock away.' }
   $abort = $false; $xSince = $null
@@ -447,22 +469,13 @@ public static class PreShowWin {
         } elseif ($sn -gt $a.play.AddSeconds($a.late)) { $a.done = $true; try { $a.wc.CancelAsync() } catch {}; Say "Voice ($($a.kind)) skipped: too slow." }
       }
     }
-    if ($script:voiceOn) {
-      $spoke = ((Get-Date) - $script:voiceStart).TotalSeconds
-      try { if (($vp.NaturalDuration.HasTimeSpan -and $vp.Position -ge $vp.NaturalDuration.TimeSpan.Subtract([TimeSpan]::FromMilliseconds(200))) -or $spoke -gt 25) { $script:voiceOn = $false } }
-      catch { $script:voiceOn = $false }
-    }
-    $duckTo = if ($script:voiceOn) { 0.22 } else { 1.0 }                                 # music drops to about a fifth under the voice
-    $script:duck = $script:duck + [Math]::Max(-0.3, [Math]::Min(0.3, $duckTo - $script:duck))
+    $left = ($target - $sn).TotalSeconds
+    SoundTick $left
     if ($mp) {
-      $left = ($target - $sn).TotalSeconds; $played = ((Get-Date) - $script:trackStart).TotalSeconds
-      $v = $MusicVolume * [Math]::Min(1, $played / 2)                         # two-second fade in
-      if ($left -lt 6) { $v = $v * [Math]::Max(0, ($left - 1.2) / 4.8) }      # fade out; silent 1.2 s before the deck
       $ended = $false
       try {
-        $mp.Volume = $v * $script:duck
         if ($mp.NaturalDuration.HasTimeSpan) { $ended = $mp.Position -ge $mp.NaturalDuration.TimeSpan.Subtract([TimeSpan]::FromMilliseconds(350)) }
-        elseif ($played -gt 8 -and $mp.Position.TotalSeconds -lt 0.5) { $ended = $true }   # a file that never started
+        elseif (((Get-Date) - $script:trackStart).TotalSeconds -gt 8 -and $mp.Position.TotalSeconds -lt 0.5) { $ended = $true }   # a file that never started
       } catch {}
       if ($ended -and $left -gt 8) { NextTrack }
     }
@@ -471,9 +484,13 @@ public static class PreShowWin {
       $nextNudge = (Get-Date).AddSeconds(240)
     }
   }
-  if ($mp) { try { $mp.Stop(); $mp.Close() } catch {} }
-  if ($vp) { try { $vp.Stop(); $vp.Close() } catch {} }
   if ($abort) {                                                    # the full stop: no deck, back to the desktop
+    for ($k = 6; $k -ge 0; $k--) {                                  # even here the sound is turned down, not cut: 0.6 s
+      try { if ($mp) { $mp.Volume = $mp.Volume * $k / ($k + 1) }; if ($vp) { $vp.Volume = $vp.Volume * $k / ($k + 1) } } catch {}
+      Start-Sleep -Milliseconds 90
+    }
+    if ($mp) { try { $mp.Stop(); $mp.Close() } catch {} }
+    if ($vp) { try { $vp.Stop(); $vp.Close() } catch {} }
     KioskProcs | ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }
     try { $ssw.View.Exit() } catch {}
     Say 'Pre-show stopped. The slideshow was closed; the deck itself is untouched.'
@@ -483,16 +500,26 @@ public static class PreShowWin {
   # By now the page has let its words fade and shows only the deck's background. Start slide 1 while the slideshow is
   # still hidden under the browser, then lift it above the browser and give it the keyboard, and only then close the
   # browser. Same background on both, so the title simply arrives; no other window can flash through.
+  # The sound is not stopped here. A fade that is still running carries on through the hand-over and ends by itself.
+  if (-not $script:fadeAt) {                                        # the deck came early (kiosk closed by hand) or the closing call ran long
+    $script:fadeAt = Get-Date; if ((SNow) -lt $target.AddSeconds(-2)) { $script:fadeSecs = 2.0 }
+  }
   Retry { $ssw.View.GotoSlide(1, -1) } 8 | Out-Null                # slide 1 from the top: animations and timings start now
   try { if ($ssw.View.State -ne 1) { $ssw.View.State = 1 } } catch {}
-  Start-Sleep -Milliseconds 350                                    # let PowerPoint paint the slide before it is shown
+  SoundTick 0
+  Start-Sleep -Milliseconds 175; SoundTick 0; Start-Sleep -Milliseconds 175   # let PowerPoint paint the slide before it is shown
   [PreShowWin]::Raise($hwnd, $true)
   $sf = [PreShowWin]::Focus($hwnd)
   KioskProcs | ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }
-  Start-Sleep -Milliseconds 300
+  SoundTick 0
+  Start-Sleep -Milliseconds 150; SoundTick 0; Start-Sleep -Milliseconds 150
   if (-not $sf) { $sf = [PreShowWin]::Focus($hwnd) }
   [PreShowWin]::Raise($hwnd, $false)                               # no longer pinned: Alt+Tab and Esc behave as usual
   Say "Showtime. The deck has the screen (keyboard focus on the slideshow: $sf)."
+  $quiet = (Get-Date).AddSeconds(15)                                # the music's last seconds, and the end of a late closing call
+  while ((SoundLeft) -and (Get-Date) -lt $quiet) { Start-Sleep -Milliseconds 100; SoundTick 0 }
+  if ($mp) { try { $mp.Stop(); $mp.Close() } catch {} }
+  if ($vp) { try { $vp.Stop(); $vp.Close() } catch {} }
 }
 catch {
   Say "FAILED: $($_.Exception.Message)"
