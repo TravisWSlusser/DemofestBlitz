@@ -16,6 +16,8 @@ param(
   [string]$Bg     = '000000',                   # unused by the current page (it fades to the deck background); kept for other decks
   [string]$Music  = '',                         # folder of background music; empty = the "music" folder next to this script
   [double]$MusicVolume = 0.5,                   # 0 to 1, on top of the laptop's own volume
+  [switch]$NoVoice,                             # turn the announcer off
+  [double]$VoiceVolume = 1.0,                   # 0 to 1
   [switch]$Nudge                                # OFF by default. The laptop's policy locks the screen after 10 idle minutes. The script
                                                 # already asks Windows to keep the display on, the way a video player does. If a rehearsal
                                                 # shows the lock still arriving, -Nudge taps the unused F15 key every 4 minutes so Windows
@@ -44,6 +46,26 @@ try {
   if ($target -lt (Get-Date).AddSeconds(20)) { throw "Show time $($target.ToString('HH:mm:ss')) is already here or past. Set SHOWAT to a later time." }
   $atMs = [long]([DateTimeOffset]$target).ToUnixTimeMilliseconds()
   Say "Show starts at $($target.ToString('HH:mm:ss')). Deck: $Deck"
+
+  # ---- the game server's clock. The big screen and the phones count down on it, so this script does too:
+  # otherwise a laptop clock that is a few seconds off would cut to the deck early or late.
+  [Net.ServicePointManager]::SecurityProtocol = [Net.ServicePointManager]::SecurityProtocol -bor [Net.SecurityProtocolType]::Tls12
+  $site = ([uri]$Url).GetLeftPart([UriPartial]::Authority)
+  $script:srvOffsetMs = 0.0; $ASK = 18.0; $ANS = 8.0; $FIN = 20.0; $bestRtt = [double]::MaxValue
+  for ($i = 0; $i -lt 3; $i++) {
+    try {
+      $t0 = Get-Date; $st = Invoke-RestMethod -Uri "$site/api/preshow/state?show=$atMs" -TimeoutSec 8; $t1 = Get-Date
+      $rtt = ($t1 - $t0).TotalMilliseconds
+      if ($rtt -lt $bestRtt) {                                     # the quickest round trip is the best clock sample
+        $bestRtt = $rtt
+        $srv = [DateTimeOffset]::FromUnixTimeMilliseconds([long]$st.now).LocalDateTime
+        $script:srvOffsetMs = ($srv - $t1).TotalMilliseconds + $rtt / 2
+        $ASK = $st.ask / 1000; $ANS = $st.answer / 1000; $FIN = $st.final / 1000
+      }
+    } catch { if ($i -eq 2 -and $bestRtt -eq [double]::MaxValue) { Say "Could not reach the game server: $($_.Exception.Message)" } }
+  }
+  if ($bestRtt -ne [double]::MaxValue) { Say ("Game server reached. Its clock is {0:N0} ms from this laptop's." -f $script:srvOffsetMs) }
+  function SNow { (Get-Date).AddMilliseconds($script:srvOffsetMs) }
 
   Add-Type @"
 using System; using System.Runtime.InteropServices;
@@ -165,18 +187,68 @@ public static class PreShowWin {
   }
   if ($mp) { NextTrack }
 
+  # ---- the announcer: an ElevenLabs voice. The server writes each line from the live leaderboard and returns the audio;
+  # this script only asks for it on a schedule and plays it, dipping the music underneath. Schedule, in server time:
+  # a welcome just after the start, a standings update at an answer reveal roughly every two minutes (every fifth
+  # card), and the winner over the closing countdown. Any line that fails or is slow is simply skipped.
+  $plan = New-Object System.Collections.ArrayList; $vp = $null
+  $script:voiceOn = $false; $script:voiceStart = Get-Date; $script:duck = 1.0
+  if (-not $NoVoice) {
+    try { Add-Type -AssemblyName PresentationCore, WindowsBase; $vp = New-Object System.Windows.Media.MediaPlayer }
+    catch { Say "Voice unavailable: $($_.Exception.Message)" }
+  }
+  if ($vp) {
+    $s0 = SNow; $CYC = $ASK + $ANS
+    if (($target - $s0).TotalSeconds -gt 70) { [void]$plan.Add(@{ kind = 'welcome'; fetch = $s0.AddSeconds(1); play = $s0.AddSeconds(5) }) }
+    for ($j = 2; $j -lt 200; $j += 5) {
+      $rev = $target.AddSeconds(-($FIN + $ANS + $j * $CYC))        # the moment card j-from-the-end shows its answer
+      if ($rev -lt $s0.AddSeconds(30)) { break }
+      [void]$plan.Add(@{ kind = 'mid'; fetch = $rev.AddSeconds(-4); play = $rev.AddSeconds(0.7) })
+    }
+    [void]$plan.Add(@{ kind = 'final'; fetch = $target.AddSeconds(-($FIN + 3)); play = $target.AddSeconds(-$FIN + 0.8) })
+    Say "Announcer: $($plan.Count) lines planned."
+  }
+
   $nextNudge = (Get-Date).AddSeconds(240)
   if ($Nudge) { Say 'Nudge is on: an F15 key tap every 4 minutes keeps the idle lock away.' }
-  while ((Get-Date) -lt $target) {
+  while ((SNow) -lt $target) {
     Start-Sleep -Milliseconds 200
     if (-not (KioskProcs)) { Say 'Kiosk closed by hand; revealing the deck now.'; break }
+    $sn = SNow
+    foreach ($a in $plan) {
+      if (-not $a.task -and $sn -ge $a.fetch -and $sn -lt $a.play.AddSeconds(4)) {
+        $a.file = Join-Path $env:TEMP ("preshow-voice-$atMs-$($a.kind)-$($plan.IndexOf($a)).mp3")
+        $a.wc = New-Object System.Net.WebClient
+        $a.task = $a.wc.DownloadFileTaskAsync([uri]"$site/api/preshow/announce?show=$atMs&kind=$($a.kind)", $a.file)
+      }
+      if ($a.task -and -not $a.done -and $sn -ge $a.play) {
+        if ($a.task.IsCompleted) {
+          $a.done = $true
+          if ($a.task.Status -eq 'RanToCompletion' -and (Test-Path -LiteralPath $a.file) -and (Get-Item -LiteralPath $a.file).Length -gt 2000) {
+            $words = ''; try { $words = [uri]::UnescapeDataString($a.wc.ResponseHeaders['X-Voice-Text']) } catch {}
+            try { $vp.Stop(); $vp.Open([uri]$a.file); $vp.Volume = $VoiceVolume; $vp.Play(); $script:voiceStart = Get-Date; $script:voiceOn = $true; Say "Voice ($($a.kind)): $words" }
+            catch { Say "Voice ($($a.kind)) could not play: $($_.Exception.Message)" }
+          } else {
+            $why = 'no audio came back'; try { $why = $a.task.Exception.InnerException.Message } catch {}
+            Say "Voice ($($a.kind)) skipped: $why"
+          }
+        } elseif ($sn -gt $a.play.AddSeconds(4)) { $a.done = $true; try { $a.wc.CancelAsync() } catch {}; Say "Voice ($($a.kind)) skipped: too slow." }
+      }
+    }
+    if ($script:voiceOn) {
+      $spoke = ((Get-Date) - $script:voiceStart).TotalSeconds
+      try { if (($vp.NaturalDuration.HasTimeSpan -and $vp.Position -ge $vp.NaturalDuration.TimeSpan.Subtract([TimeSpan]::FromMilliseconds(200))) -or $spoke -gt 25) { $script:voiceOn = $false } }
+      catch { $script:voiceOn = $false }
+    }
+    $duckTo = if ($script:voiceOn) { 0.22 } else { 1.0 }                                 # music drops to about a fifth under the voice
+    $script:duck = $script:duck + [Math]::Max(-0.3, [Math]::Min(0.3, $duckTo - $script:duck))
     if ($mp) {
-      $now = Get-Date; $left = ($target - $now).TotalSeconds; $played = ($now - $script:trackStart).TotalSeconds
+      $left = ($target - $sn).TotalSeconds; $played = ((Get-Date) - $script:trackStart).TotalSeconds
       $v = $MusicVolume * [Math]::Min(1, $played / 2)                         # two-second fade in
       if ($left -lt 6) { $v = $v * [Math]::Max(0, ($left - 1.2) / 4.8) }      # fade out; silent 1.2 s before the deck
       $ended = $false
       try {
-        $mp.Volume = $v
+        $mp.Volume = $v * $script:duck
         if ($mp.NaturalDuration.HasTimeSpan) { $ended = $mp.Position -ge $mp.NaturalDuration.TimeSpan.Subtract([TimeSpan]::FromMilliseconds(350)) }
         elseif ($played -gt 8 -and $mp.Position.TotalSeconds -lt 0.5) { $ended = $true }   # a file that never started
       } catch {}
@@ -188,6 +260,7 @@ public static class PreShowWin {
     }
   }
   if ($mp) { try { $mp.Stop(); $mp.Close() } catch {} }
+  if ($vp) { try { $vp.Stop(); $vp.Close() } catch {} }
 
   # By now the page has let its words fade and shows only the deck's background. Start slide 1 while the slideshow is
   # still hidden under the browser, then lift it above the browser and give it the keyboard, and only then close the

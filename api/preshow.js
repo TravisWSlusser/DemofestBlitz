@@ -57,6 +57,17 @@ function ensureTables() {
         created_at  timestamptz NOT NULL DEFAULT now(),
         PRIMARY KEY (player_id, qi)
       )`;
+      // one row per spoken line: the text, the audio (base64 mp3) and who led at the time. A repeat request for the
+      // same line is served from here, so a line is generated, and paid for, once.
+      await sql`CREATE TABLE IF NOT EXISTS preshow_voice (
+        show        text NOT NULL,
+        slot        text NOT NULL,
+        line        text NOT NULL,
+        leader      integer,
+        audio       text NOT NULL,
+        created_at  timestamptz NOT NULL DEFAULT now(),
+        PRIMARY KEY (show, slot)
+      )`;
     })().catch(e => { ready = null; throw e; });
   }
   return ready;
@@ -213,11 +224,121 @@ async function reset(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'POST only' });
   await ensureTables();
   await sql`TRUNCATE preshow_answers, preshow_players RESTART IDENTITY`;
+  await sql`TRUNCATE preshow_voice`;
   cache.clear();
   return res.status(200).json({ ok: true });
 }
 
-const HANDLERS = { state, join, answer, results, reset };
+// ── the announcer ───────────────────────────────────────────────────────────
+// GET announce?show=<at>&kind=welcome|mid|final → audio/mpeg, spoken by an ElevenLabs voice.
+// The launcher on the presenter's laptop asks for these on a schedule and plays them over the music. The words are
+// always composed HERE from the live leaderboard; a caller cannot supply text, so this cannot be used as a free
+// text-to-speech service. The API key lives only in the ELEVENLABS_API_KEY environment variable.
+const VOICE_ID = process.env.ELEVENLABS_VOICE || 'QTGiyJvep6bcx4WD1qAq';
+const VOICE_MODEL = process.env.ELEVENLABS_MODEL || 'eleven_turbo_v2_5';
+const VOICE_DAILY_CAP = 60;          // generated lines per 24 hours, whatever happens
+const WELCOME = 'Welcome to session six oh nine. While you wait, grab your phone, scan the code on the screen, and add your name. Right answers score. Fast answers score more.';
+
+/* A name is read aloud to the room, so it gets a second, stricter look than the one for the screen: first name only
+   (which defuses most two-word joke names), and nothing from the list of names that are only rude when spoken. */
+const PRANKS = ['bendover', 'benderover', 'mikehunt', 'mikehawk', 'mikerotch', 'mikecrotch', 'mikelitoris', 'hughjass', 'hughjanus', 'hughgrection', 'hugeass',
+  'philmccracken', 'philmacracken', 'jackmehoff', 'jackoff', 'jackgoff', 'dixienormous', 'dixonormous', 'haywoodjablome', 'moelester', 'molester',
+  'seymourbutts', 'seymorebutts', 'ipfreely', 'ipdaily', 'anitadick', 'anitahardone', 'mccockiner', 'busterhymen', 'harrysach', 'oliverklozoff',
+  'oliverclothesoff', 'pennytration', 'philatio', 'fellatio', 'jennatalia', 'genitalia', 'kuntz', 'claytoris', 'claytorris', 'testickle', 'tesstickle',
+  'drewpeacock', 'droopycock', 'waynekerr', 'wanker', 'ligma', 'sugma', 'sugondese', 'bofa', 'deez', 'joemama', 'yourmom', 'urmom',
+  'ericshun', 'erection', 'ivanahump', 'analbeads', 'dildo', 'boner', 'nutsack', 'ballsack', 'buttface', 'butthole', 'poop', 'fart'];
+function spoken(name) {
+  const squashed = String(name).toLowerCase().replace(/[^a-z]/g, '');
+  if (PRANKS.some(p => squashed.includes(p)) || isRude(name)) return null;
+  const first = String(name).trim().split(/\s+/)[0].replace(/[^\p{L}'’-]/gu, '');
+  if (first.length < 2 || first.length > 14) return null;
+  return first[0].toUpperCase() + first.slice(1).toLowerCase();   // "AVA" would be spelled out letter by letter
+}
+
+/* The words for a standings update or the closing call. Short on purpose: a line has to fit inside one answer reveal. */
+function composeLine(kind, top, players, s, newLeader) {
+  const nm = (p, fallback) => (p && spoken(p.name)) || fallback;
+  const [a, b, c] = top;
+  const A = nm(a, 'our leader'), B = nm(b, 'second place'), C = nm(c, 'third place');
+  if (kind === 'final') {
+    if (!a || a.score === 0) return 'That is the pre-show. Phones on silent, please. The show starts now.';
+    let line = 'That is the game. ' + (A === 'our leader' ? 'Our winner finishes' : A + ' wins it') + ' with ' + a.score + ' points.';
+    if (b && c) line += ' ' + (B === 'second place' ? 'Second place' : B) + ' takes second, and ' + (C === 'third place' ? 'third place rounds it out' : C + ' third') + '.';
+    else if (b) line += ' ' + (B === 'second place' ? 'Well played to second place' : B + ' takes second') + '.';
+    return line + ' Phones on silent, please. The show starts now.';
+  }
+  if (!a) return 'Nobody is on the board yet. Scan the code on the screen and be the first name up there.';
+  if (a.score === 0) return players + (players === 1 ? ' player is' : ' players are') + ' in, and nobody has scored yet. The next right answer takes the lead.';
+  if (!b) return A + ' is all alone on the board with ' + a.score + ' points. Somebody scan that code and bring some competition.';
+  let line;
+  if (a.score === b.score) line = A + ' and ' + B + ' are tied at the top with ' + a.score + ' points.';
+  else {
+    line = newLeader ? 'We have a new leader. ' + A + ' takes the top spot with ' + a.score + ' points.'
+      : (s % 2 ? A + ' leads with ' + a.score + ' points.' : A + ' is still out in front with ' + a.score + ' points.');
+    const gap = a.score - b.score;
+    line += gap <= 80 ? ' ' + B + ' is only ' + gap + ' behind' : ' ' + B + ' is in second';
+    line += c && c.score > 0 ? ', and ' + C + ' holds third.' : '.';
+  }
+  return line + ' ' + players + ' players are in. There is still time to scan the code.';
+}
+
+async function announce(req, res) {
+  const key = process.env.ELEVENLABS_API_KEY;
+  if (!key) return res.status(503).json({ error: 'The voice is not configured.' });
+  await ensureTables();
+  const show = showOf(req.query.show);
+  const now = Date.now();
+  if (show === 'preview' || Number(show) < now - 60000 || Number(show) > now + 20 * 60000) return res.status(400).json({ error: 'That show is not live.' });
+  const kind = ['welcome', 'mid', 'final'].includes(String(req.query.kind)) ? String(req.query.kind) : 'mid';
+  const t = timeline(show, now);
+  // the welcome is the same for every show, so it is stored once for all of them; a changed text or voice makes a new row
+  const rowShow = kind === 'welcome' ? '*' : show;
+  const slot = kind === 'welcome' ? 'welcome:' + VOICE_ID + ':' + VOICE_MODEL + ':' + WELCOME.length : kind === 'mid' ? 'mid:' + t.s : 'final';
+  const send = (line, b64) => {
+    res.setHeader('Content-Type', 'audio/mpeg');
+    res.setHeader('X-Voice-Text', encodeURIComponent(line));
+    return res.status(200).send(Buffer.from(b64, 'base64'));
+  };
+  const hit = await sql`SELECT line, audio FROM preshow_voice WHERE show = ${rowShow} AND slot = ${slot}`;
+  if (hit.length) return send(hit[0].line, hit[0].audio);
+
+  const used = await sql`SELECT COUNT(*)::int AS n FROM preshow_voice WHERE created_at > now() - interval '24 hours'`;
+  if (used[0].n >= VOICE_DAILY_CAP) return res.status(429).json({ error: 'The voice has reached its daily limit.' });
+
+  let line = WELCOME, leader = null;
+  if (kind !== 'welcome') {
+    const [top, cnt, prev] = await Promise.all([
+      sql`SELECT id, name, score FROM preshow_players WHERE show = ${show} ORDER BY score DESC, id ASC LIMIT 3`,
+      sql`SELECT COUNT(*)::int AS n FROM preshow_players WHERE show = ${show}`,
+      sql`SELECT leader FROM preshow_voice WHERE show = ${show} AND slot LIKE 'mid:%' ORDER BY created_at DESC LIMIT 1`,
+    ]);
+    leader = top.length && top[0].score > 0 ? top[0].id : null;
+    const newLeader = prev.length > 0 && prev[0].leader !== null && leader !== null && prev[0].leader !== leader;
+    line = composeLine(kind, top, cnt[0].n, t.s, newLeader);
+  }
+
+  let r;
+  try {
+    r = await fetch('https://api.elevenlabs.io/v1/text-to-speech/' + VOICE_ID + '?output_format=mp3_44100_128', {
+      method: 'POST',
+      headers: { 'xi-api-key': key, 'Content-Type': 'application/json', Accept: 'audio/mpeg' },
+      body: JSON.stringify({ text: line, model_id: VOICE_MODEL }),
+      signal: AbortSignal.timeout(9000),
+    });
+  } catch (e) { return res.status(504).json({ error: 'The voice service did not answer in time.' }); }
+  if (!r.ok) {
+    const detail = (await r.text().catch(() => '')).slice(0, 400);     // ElevenLabs' own explanation; it never contains the key
+    console.error('preshow voice', r.status, detail);
+    return res.status(502).json({ error: 'The voice service refused the request.', status: r.status, detail });
+  }
+  const b64 = Buffer.from(await r.arrayBuffer()).toString('base64');
+  await sql`INSERT INTO preshow_voice (show, slot, line, leader, audio) VALUES (${rowShow}, ${slot}, ${line}, ${leader}, ${b64}) ON CONFLICT (show, slot) DO NOTHING`;
+  return send(line, b64);
+}
+
+export const config = { maxDuration: 30 };
+
+const HANDLERS = { state, join, answer, results, reset, announce };
 
 export default async function handler(req, res) {
   res.setHeader('Cache-Control', 'no-store');
