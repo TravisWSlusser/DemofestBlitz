@@ -33,7 +33,7 @@
     // goes solid that colour, so when the launcher closes the browser the deck underneath looks like the same picture.
     const q = new URLSearchParams(location.search);
     const at = Number(q.get('at')) || 0;
-    const bg = /^[0-9a-f]{6}$/i.test(q.get('bg') || '') ? '#' + q.get('bg') : '#10172A';
+    const bg = /^[0-9a-f]{6}$/i.test(q.get('bg') || '') ? '#' + q.get('bg') : '#000000';
     const c = document.getElementById('clock'), l = document.getElementById('lbl');
     const pad = n => String(n).padStart(2, '0');
     let out = false;
