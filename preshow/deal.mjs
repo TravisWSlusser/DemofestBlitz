@@ -1,5 +1,9 @@
-// Deals the running order of every show from the local question bank, and writes it back into the bank's "sets".
-//   node deal.mjs <questions.json> [seed]
+// Deals a running order from the local question bank.
+//   node deal.mjs <questions.json> --print <set> [seed]   one fresh draw for one show, printed as JSON. The bank is
+//                                                         not touched. The launcher does this at every launch, so
+//                                                         no two shows ask the same questions.
+//   node deal.mjs <questions.json> [seed]                 deals every show and writes the orders into the bank's
+//                                                         "sets": the launcher's fallback if a fresh draw fails.
 //
 // On screen each round has two spins: the wheel lands on a subject, then a second spinner lands on a difficulty
 // (easy, medium or hard: the harder, the more points). This script is where both are actually drawn:
@@ -7,17 +11,20 @@
 //   - difficulty: drawn at random for each round. Early rounds lean easy and late rounds lean hard, and the last
 //     round is always hard, so most of the points are still to play for when latecomers sit down;
 //   - question: drawn at random from the bank's questions of that subject and difficulty.
-// The draw is made here, ahead of the show, and not at launch, so the questions that will play can be read and
-// checked first. Run it again for a fresh draw; pass the seed it prints to get the same draw back.
+// Pass the seed a draw reports to get the same draw back.
 import { readFileSync, writeFileSync } from 'node:fs';
 import { randomBytes } from 'node:crypto';
 
-const file = process.argv[2];
-if (!file) { console.error('usage: node deal.mjs <questions.json> [seed]'); process.exit(1); }
+const args = process.argv.slice(2), at = args.indexOf('--print');
+const only = at >= 0 ? String(args[at + 1] || '') : '';                 // --print <set>: deal that one show and print it
+if (at >= 0) args.splice(at, 2);
+const file = args[0], seedArg = args[1];
+if (!file || (at >= 0 && !only)) { console.error('usage: node deal.mjs <questions.json> [--print <set>] [seed]'); process.exit(1); }
 const b = JSON.parse(readFileSync(file, 'utf8'));
 const cfg = Object.assign({ open: '', rounds: { 10: 16, 15: 25, test: 3 }, always: [] }, b.deal || {});
-const seed = process.argv[3] !== undefined ? Number(process.argv[3]) >>> 0 : randomBytes(4).readUInt32LE(0);
-if (process.argv[3] !== undefined && !/^\d+$/.test(process.argv[3])) { console.error('the seed must be a whole number'); process.exit(1); }
+const seed = seedArg !== undefined ? Number(seedArg) >>> 0 : randomBytes(4).readUInt32LE(0);
+if (seedArg !== undefined && !/^\d+$/.test(seedArg)) { console.error('the seed must be a whole number'); process.exit(1); }
+if (only && !cfg.rounds[only]) { console.error('there is no show called ' + only); process.exit(1); }
 
 // a small seeded generator (mulberry32), so a draw can be repeated from its seed
 let s = seed;
@@ -86,6 +93,7 @@ function difficulties(subs, pool) {
 
 const dealt = {}, played = [];                                          // questions already in a show are reused first: fewer to check
 for (const [name, n] of Object.entries(cfg.rounds)) {
+  if (only && name !== only) continue;
   const subs = subjects(n), pool = b.bank.filter(q => !q.skip), diffs = difficulties(subs, pool);
   const ids = [];
   subs.forEach((c, i) => {
@@ -99,8 +107,10 @@ for (const [name, n] of Object.entries(cfg.rounds)) {
   for (const id of ids) if (!played.includes(id)) played.push(id);
 }
 
+if (only) { console.log(JSON.stringify({ set: only, seed, ids: dealt[only] })); process.exit(0); }
+
 b.sets = dealt;
-b.deal = Object.assign({}, cfg, { seed, dealt: new Date().toISOString().slice(0, 16).replace('T', ' ') });
+b.deal =Object.assign({}, cfg, { seed, dealt: new Date().toISOString().slice(0, 16).replace('T', ' ') });
 writeFileSync(file, JSON.stringify(b, null, 1));
 
 console.log('seed ' + seed);

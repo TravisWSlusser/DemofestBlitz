@@ -19,7 +19,8 @@ param(
   [string]$Bg     = '000000',                   # unused by the current page (it fades to the deck background); kept for other decks
   [string]$Music  = '',                         # folder of background music; empty = the "music" folder next to this script
   [double]$MusicVolume = 0.5,                   # 0 to 1, on top of the laptop's own volume
-  [string]$Set    = '10',                       # which question set plays: a name from "sets" in the question file (10, 15, test)
+  [string]$Set    = '10',                       # which show plays: 10, 15 or test (the number of rounds for each is in the question file)
+  [switch]$FixedOrder,                          # play the order stored in the question file's "sets" instead of a fresh draw
   [string]$Questions = '',                      # the question file; empty = questions.json next to this script
   [switch]$NoVoice,                             # turn the announcer off
   [switch]$NoMenu,                              # skip the start screen and launch straight away
@@ -189,14 +190,37 @@ try {
   $Deck = (Resolve-Path -LiteralPath $Deck).Path
 
   # ---- the questions. They live in a file on this laptop (questions.json next to this script; it is not in the public
-  # repo) and are handed to the server when this show is claimed, a few lines further down. -Set says which ordered
-  # list of them plays. A file that is there but cannot be used stops the launch: better than the wrong questions.
+  # repo) and are handed to the server when this show is claimed, a few lines further down. -Set says which show
+  # plays. A file that is there but cannot be used stops the launch: better than the wrong questions.
   $cards = @(); $qFile = if ($Questions) { $Questions } else { Join-Path $PSScriptRoot 'questions.json' }
   if (Test-Path -LiteralPath $qFile) {
     try {
       $bank = Get-Content -LiteralPath $qFile -Raw -Encoding UTF8 | ConvertFrom-Json
       $byId = @{}; foreach ($q in $bank.bank) { $byId["$($q.id)"] = $q }
-      $ids = @($bank.sets.$Set)
+      # A fresh draw from the whole bank at every launch (deal.mjs --print: subjects, difficulties and questions all
+      # drawn anew), so no two shows ask the same questions. If the draw cannot be made, the order stored in the
+      # bank's "sets" plays instead, and the log says so.
+      $ids = @(); $drawNote = ''
+      $nodes = @((Join-Path $env:ProgramFiles 'Adobe\Adobe Creative Cloud Experience\libs\node.exe'), (Join-Path $env:ProgramFiles 'nodejs\node.exe'))
+      $onPath = Get-Command node.exe -ErrorAction SilentlyContinue; if ($onPath) { $nodes += $onPath.Source }
+      $node = $nodes | Where-Object { $_ -and (Test-Path -LiteralPath $_) } | Select-Object -First 1
+      $dealer = Join-Path $PSScriptRoot 'deal.mjs'
+      if (-not $FixedOrder -and $node -and (Test-Path -LiteralPath $dealer)) {
+        try {
+          $psi = New-Object System.Diagnostics.ProcessStartInfo
+          $psi.FileName = $node; $psi.Arguments = "`"$dealer`" `"$qFile`" --print `"$Set`""
+          $psi.UseShellExecute = $false; $psi.RedirectStandardOutput = $true; $psi.RedirectStandardError = $true; $psi.CreateNoWindow = $true
+          $proc = [System.Diagnostics.Process]::Start($psi)
+          $outTask = $proc.StandardOutput.ReadToEndAsync(); $errTask = $proc.StandardError.ReadToEndAsync()
+          if (-not $proc.WaitForExit(15000)) { try { $proc.Kill() } catch {}; throw 'the dealer took too long' }
+          if ($proc.ExitCode -ne 0) { throw "the dealer said: $("$($errTask.Result)".Trim())" }
+          $draw = "$($outTask.Result)".Trim() | ConvertFrom-Json
+          $ids = @($draw.ids)
+          if (-not $ids.Count) { throw 'the dealer returned no questions' }
+          $drawNote = "a fresh draw (seed $($draw.seed)): $($ids -join ' ')"
+        } catch { $ids = @(); Say "A fresh draw could not be made ($($_.Exception.Message)). The stored order plays instead." }
+      } elseif (-not $FixedOrder) { Say 'No dealer found on this laptop (node.exe or deal.mjs is missing). The stored order plays instead.' }
+      if (-not $ids.Count) { $ids = @($bank.sets.$Set); $drawNote = "the stored order: $($ids -join ' ')" }
       if (-not $ids.Count -or -not $ids[0]) { throw "there is no set called '$Set'" }
       foreach ($id in $ids) {
         $q = $byId["$id"]; if (-not $q) { throw "set '$Set' lists '$id', which is not in the bank" }
@@ -205,7 +229,7 @@ try {
                      cat = $(if ($c) { "$($c.name)" } else { "$($q.cat)" }); short = $(if ($c) { "$($c.short)" } else { "$($q.cat)" }) }
       }
     } catch { throw "The question file could not be used ($qFile): $($_.Exception.Message)" }
-    Say "Questions: set '$Set', $($cards.Count) rounds."
+    Say "Questions: set '$Set', $($cards.Count) rounds, $drawNote"
   } else { Say "No question file at $qFile. The built-in sample questions will play." }
 
   # ---- the start screen: AUDIO TEST or LAUNCH PRE SHOW. Nothing else happens until LAUNCH is pressed.
