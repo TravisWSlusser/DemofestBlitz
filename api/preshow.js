@@ -413,6 +413,7 @@ async function announce(req, res) {
   const rowShow = kind === 'welcome' ? '*' : show;
   const slot = kind === 'welcome' ? 'welcome:timed:' + VOICE_ID + ':' + VOICE_MODELS[0] + ':' + WELCOME.length : kind === 'mid' ? 'mid:' + t.s : 'final';
   const send = async (line, b64, cues, ms) => {
+    cues = cues.replace(/six oh nine/gi, '609');                       // written out for the voice, shown as a number in the captions
     if (playAt) {
       await sql`INSERT INTO preshow_live (show, play_at, ms, cues) VALUES (${show}, ${playAt}, ${ms}, ${cues})
                 ON CONFLICT (show) DO UPDATE SET play_at = EXCLUDED.play_at, ms = EXCLUDED.ms, cues = EXCLUDED.cues`;
