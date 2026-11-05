@@ -263,8 +263,9 @@ function composeLine(kind, top, players, s, newLeader) {
   if (kind === 'final') {
     if (!a || a.score === 0) return 'That is the pre-show. Phones on silent, please. The show starts now.';
     let line = 'That is the game. ' + (A === 'our leader' ? 'Our winner finishes' : A + ' wins it') + ' with ' + a.score + ' points.';
-    if (b && c) line += ' ' + (B === 'second place' ? 'Second place' : B) + ' takes second, and ' + (C === 'third place' ? 'third place rounds it out' : C + ' third') + '.';
-    else if (b) line += ' ' + (B === 'second place' ? 'Well played to second place' : B + ' takes second') + '.';
+    const b2 = b && b.score > 0, c2 = c && c.score > 0;               // a placing is only called for someone who scored
+    if (b2 && c2) line += ' ' + (B === 'second place' ? 'Second place' : B) + ' takes second, and ' + (C === 'third place' ? 'third place rounds it out' : C + ' third') + '.';
+    else if (b2) line += ' ' + (B === 'second place' ? 'Well played to second place' : B + ' takes second') + '.';
     return line + ' Phones on silent, please. The show starts now.';
   }
   if (!a) return 'Nobody is on the board yet. Scan the code on the screen and be the first name up there.';
@@ -275,11 +276,15 @@ function composeLine(kind, top, players, s, newLeader) {
   else {
     line = newLeader ? 'We have a new leader. ' + A + ' takes the top spot with ' + a.score + ' points.'
       : (s % 2 ? A + ' leads with ' + a.score + ' points.' : A + ' is still out in front with ' + a.score + ' points.');
-    const gap = a.score - b.score;
-    line += gap <= 80 ? ' ' + B + ' is only ' + gap + ' behind' : ' ' + B + ' is in second';
-    line += c && c.score > 0 ? ', and ' + C + ' holds third.' : '.';
+    if (b.score === 0) line += ' Nobody else has scored yet.';
+    else {
+      const gap = a.score - b.score;
+      line += gap <= 80 ? ' ' + B + ' is only ' + gap + ' behind' : ' ' + B + ' is in second';
+      line += c && c.score > 0 ? ', and ' + C + ' holds third.' : '.';
+    }
   }
-  return line + ' ' + players + ' players are in. There is still time to scan the code.';
+  // one short tail, alternating between updates, so the whole line stays close to the length of an answer reveal
+  return line + (s % 2 ? ' ' + players + ' players are in.' : ' There is still time to scan the code.');
 }
 
 async function announce(req, res) {
